@@ -3,9 +3,9 @@ import json
 from dotenv import load_dotenv
 from langchain_core.utils.uuid import uuid7
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import Command
 
 from travel_planner.agent import build_agent
+from travel_planner.hitl import run_turn
 
 ITINERARY_PATH = "/itinerary.md"
 
@@ -26,12 +26,6 @@ def print_progress(chunk: dict) -> None:
                     print(f"      · {call['name']}")
 
 
-def run_until_interrupt(agent, payload, config) -> list:
-    for chunk in agent.stream(payload, config=config, stream_mode="updates", subgraphs=True, version="v2"):
-        print_progress(chunk)
-    return list(agent.get_state(config).interrupts)
-
-
 def ask_decision(action: dict, allowed: list[str]) -> dict:
     print(f"\n  Approval needed: {action['name']}")
     print("  " + json.dumps(action["args"], indent=2).replace("\n", "\n  "))
@@ -50,17 +44,6 @@ def ask_decision(action: dict, allowed: list[str]) -> dict:
                 print(f"  Invalid JSON: {e}")
                 continue
             return {"type": "edit", "edited_action": {"name": action["name"], "args": args}}
-
-
-def resolve_interrupts(interrupts: list) -> dict:
-    """Build a resume map keyed by interrupt id, so parallel subagent interrupts resume together."""
-    resume = {}
-    for pending in interrupts:
-        requests = pending.value["action_requests"]
-        allowed_by_tool = {cfg["action_name"]: cfg["allowed_decisions"] for cfg in pending.value["review_configs"]}
-        decisions = [ask_decision(req, allowed_by_tool[req["name"]]) for req in requests]
-        resume[pending.id] = {"decisions": decisions}
-    return resume
 
 
 def print_last_reply(agent, config) -> None:
@@ -97,9 +80,7 @@ def main():
             print_itinerary(agent, config)
             continue
 
-        interrupts = run_until_interrupt(agent, {"messages": [{"role": "user", "content": user_input}]}, config)
-        while interrupts:
-            interrupts = run_until_interrupt(agent, Command(resume=resolve_interrupts(interrupts)), config)
+        run_turn(agent, {"messages": [{"role": "user", "content": user_input}]}, config, ask_decision, print_progress)
         print_last_reply(agent, config)
 
 
