@@ -60,7 +60,24 @@ uv run langgraph dev
 uv run pytest
 ```
 
-These tests cover the mock tools only and make no LLM calls.
+These tests cover the mock tools and the offline/online evaluators, and make no LLM calls.
+
+## Evaluation lifecycle demo
+
+`evals/` holds numbered scripts that walk through the agent development lifecycle in LangSmith: a golden dataset, offline experiments with trajectory evaluators, simulated production traffic, online evaluators and automations, an annotation queue, and promoting reviewed runs back into the dataset. The story compares a flawed v1 coordinator prompt with the fixed v2 (`travel_planner/prompts.py`, selected with `TRAVEL_PLANNER_PROMPT_VERSION`).
+
+See **[docs/DEMO.md](docs/DEMO.md)** for the presenter runbook and the "when to use what" guide.
+
+| Script | Stage |
+|---|---|
+| `evals/01_create_golden_dataset.py` | Golden dataset with splits and a `baseline` version tag |
+| `evals/02_run_offline_experiment.py --prompt v1\|v2` | Offline experiment: code, trajectory and LLM-judge evaluators |
+| `evals/03_simulate_production_traffic.py` | Multi-turn simulated users against the "deployed" prompt |
+| `evals/04_setup_annotation_queue.py` | Rubric feedback configs and the review queue |
+| `evals/05_setup_online_evaluators.py` | Online code evaluators and a flagged-runs → queue automation |
+| `evals/06_promote_reviewed_to_dataset.py` | Reviewed corrections become `from-production` golden examples |
+
+Eval code lives in `travel_planner/evals/`: the harness, the offline and online evaluators, and the golden examples.
 
 ## Mock data → real APIs
 
