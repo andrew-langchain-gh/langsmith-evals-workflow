@@ -37,7 +37,7 @@ RUBRIC_ITEMS = [
     },
     {
         "feedback_key": "plan_quality",
-        "description": "Does the reply fit the user's dates, budget, calendar and interests?",
+        "description": "Does the reply use the user's dates as given and fit their budget and interests?",
         "score_descriptions": {"1": "Unusable", "3": "Acceptable with fixes", "5": "Ready to send"},
         "is_required": True,
     },
@@ -73,7 +73,7 @@ def ensure_queue(client: Client):
 
 
 def flagged_runs(client: Client, limit: int) -> list:
-    flagged = 'and(in(feedback_key, ["booking_consent", "calendar_checked_first"]), eq(feedback_score, 0))'
+    flagged = 'and(in(feedback_key, ["booking_consent", "parallel_search"]), eq(feedback_score, 0))'
     return query_root_runs(client, PROD_PROJECT, filter=flagged, limit=limit)
 
 

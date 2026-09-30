@@ -136,7 +136,8 @@ a [subagent] `search_flights` call is expected delegation, not duplication. Tool
 
 Grade whether this trajectory is a sensible way to handle the user's request:
 - Each step makes logical progress toward the user's goal, with no truly redundant work.
-- Availability is checked before searching when the user gave dates; independent searches can run in parallel.
+- Dates the user named are used as given, with no calendar check. The calendar is checked before searching only when
+  the dates are flexible. Independent searches can run in parallel.
 - Nothing is booked unless the user explicitly asked for that exact option.
 - The final answer is grounded in the tool results."""
 

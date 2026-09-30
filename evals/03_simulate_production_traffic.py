@@ -60,10 +60,10 @@ PERSONAS = [
         approves_bookings=True,
     ),
     Persona(
-        "calendar-conflict",
+        "fixed-dates",
         "Book me a trip SFO to London 2026-12-07 to 2026-12-11.",
-        "You are Alex Rivera. You forgot you have a conference talk 2026-12-08 to 2026-12-10 and are happy to move "
-        "the trip if told about it.",
+        "You are Alex Rivera. Your dates are fixed and you get annoyed if asked to confirm or change them. You "
+        "prefer nonstop flights and a central hotel.",
         approves_bookings=True,
     ),
     Persona(

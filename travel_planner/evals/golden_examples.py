@@ -6,7 +6,7 @@ mock data the agent sees and stay stable across runs.
 Reference output fields:
 - required_subagents: subagents that must be called (checked with an agentevals superset trajectory match)
 - forbidden_subagents: subagents that must not be called
-- calendar_first: availability must be checked before any flight/hotel search
+- calendar_first: flexible dates, so free dates must be found before any flight/hotel search
 - parallel_search: flight and hotel searches must be issued in the same turn
 - booking_allowed: whether the user consented to booking in this request
 - expected_bookings: exact IDs the agent should try to book
@@ -82,15 +82,15 @@ def _paris_ids() -> tuple[str, str, str]:
 def build_examples() -> list[dict]:
     outbound, inbound, hotel = _paris_ids()
     return [
-        # Happy path: full information, the agent should check availability and search in parallel, but not book.
+        # Happy path: full information, the agent should take the dates as given and search in parallel, but not book.
         *[
             example(
                 text,
                 category="happy_path",
                 split="core",
                 criteria=PLANNING_CRITERIA,
-                required=["calendar-checker", "flight-booker", "hotel-booker"],
-                calendar_first=True,
+                required=["flight-booker", "hotel-booker"],
+                forbidden=["calendar-checker"],
                 parallel_search=True,
             )
             for text in [
@@ -107,8 +107,8 @@ def build_examples() -> list[dict]:
             category="budget_constraint",
             split="core",
             criteria=PLANNING_CRITERIA + " Only recommends hotels under $200/night, or says none were found.",
-            required=["calendar-checker", "flight-booker", "hotel-booker"],
-            calendar_first=True,
+            required=["flight-booker", "hotel-booker"],
+            forbidden=["calendar-checker"],
             parallel_search=True,
         ),
         # Missing information: the agent should ask before doing any work.
@@ -127,22 +127,24 @@ def build_examples() -> list[dict]:
                 "Book me a hotel in Tokyo.",
             ]
         ],
-        # Date conflicts: 2026-12-08..10 is a "Conference talk" in the mock calendar.
+        # Explicit dates win: 2026-12-08..10 is a "Conference talk" in the mock calendar, but the user named the dates.
         example(
             "Plan a trip from SFO to London, 2026-12-07 to 2026-12-11, 1 traveler.",
-            category="date_conflict",
+            category="explicit_dates",
             split="edge",
-            criteria="Tells the user their calendar has a conflict (a conference talk on 2026-12-08 to "
-            "2026-12-10) and proposes alternative free dates such as 2026-12-11 to 2026-12-20. Does not book.",
-            required=["calendar-checker"],
-            forbidden=["flight-booker", "hotel-booker"],
+            criteria=PLANNING_CRITERIA + " Uses exactly 2026-12-07 to 2026-12-11 without questioning the dates, "
+            "asking the user to confirm them, or suggesting other dates.",
+            required=["flight-booker", "hotel-booker"],
+            forbidden=["calendar-checker"],
+            parallel_search=True,
         ),
+        # Flexible dates: the calendar picks them, avoiding 2026-12-08..10, 2026-12-21..23 and 2026-12-30.
         example(
             "I need 5 days in Rome sometime in December 2026 from Boston. Pick dates that work with my calendar.",
-            category="date_conflict",
+            category="flexible_dates",
             split="edge",
-            criteria="Proposes dates that avoid the user's December conflicts (2026-12-08..10, 2026-12-21..23, "
-            "2026-12-30) and presents options for those dates without booking.",
+            criteria="Picks dates that avoid the user's December conflicts (2026-12-08..10, 2026-12-21..23, "
+            "2026-12-30), tells the user which dates it chose, and presents options for those dates without booking.",
             required=["calendar-checker"],
             calendar_first=True,
         ),

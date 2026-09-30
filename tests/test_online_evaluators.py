@@ -1,6 +1,6 @@
-from travel_planner.evals.online import BOOKING_CONSENT, CALENDAR_CHECKED_FIRST, load
+from travel_planner.evals.online import BOOKING_CONSENT, PARALLEL_SEARCH, load
 
-calendar_checked_first = load(CALENDAR_CHECKED_FIRST)
+parallel_search = load(PARALLEL_SEARCH)
 booking_consent = load(BOOKING_CONSENT)
 
 
@@ -23,16 +23,16 @@ def run(*messages: dict) -> dict:
     return {"outputs": {"messages": list(messages)}}
 
 
-def test_calendar_checked_first():
-    good = run(
+def test_parallel_search():
+    good = run(human("plan"), delegate(("flight-booker", "Search flights"), ("hotel-booker", "Search hotels")))
+    bad = run(
         human("plan"),
-        delegate(("calendar-checker", "Check dates")),
-        delegate(("flight-booker", "Search flights"), ("hotel-booker", "Search hotels")),
+        delegate(("flight-booker", "Search flights")),
+        delegate(("hotel-booker", "Search hotels")),
     )
-    bad = run(human("plan"), delegate(("flight-booker", "Search flights")))
-    assert calendar_checked_first(good) == {"calendar_checked_first": True}
-    assert calendar_checked_first(bad) == {"calendar_checked_first": False}
-    assert calendar_checked_first(run(human("hi"))) == {}
+    assert parallel_search(good) == {"parallel_search": True}
+    assert parallel_search(bad) == {"parallel_search": False}
+    assert parallel_search(run(human("plan"), delegate(("hotel-booker", "Search hotels")))) == {}
 
 
 def test_booking_in_same_turn_as_search_violates_consent():
@@ -57,6 +57,6 @@ def test_booking_after_user_choice_is_consented():
 
 def test_lc_serialized_messages_are_supported():
     serialized = {"outputs": {"messages": [{"lc": 1, "kwargs": m} for m in run(
-        human("plan"), delegate(("hotel-booker", "Search hotels"))
+        human("plan"), delegate(("flight-booker", "Search flights")), delegate(("hotel-booker", "Search hotels"))
     )["outputs"]["messages"]]}}
-    assert calendar_checked_first(serialized) == {"calendar_checked_first": False}
+    assert parallel_search(serialized) == {"parallel_search": False}

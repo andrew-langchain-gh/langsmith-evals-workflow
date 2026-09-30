@@ -35,14 +35,20 @@ HAPPY = example(
     category="happy_path",
     split="core",
     criteria="",
-    required=["calendar-checker", "flight-booker", "hotel-booker"],
-    calendar_first=True,
+    required=["flight-booker", "hotel-booker"],
+    forbidden=["calendar-checker"],
     parallel_search=True,
 )["outputs"]
+FLEXIBLE_DATES = example(
+    "Plan a trip sometime in December",
+    category="flexible_dates",
+    split="edge",
+    criteria="",
+    required=["calendar-checker"],
+    calendar_first=True,
+)["outputs"]
 
-V2_LIKE = outputs(
-    task("calendar-checker", "m1"), task("flight-booker", "m2"), task("hotel-booker", "m2")
-)
+V2_LIKE = outputs(task("flight-booker", "m1"), task("hotel-booker", "m1"))
 V1_LIKE = outputs(
     task("flight-booker", "m1"),
     task("hotel-booker", "m2"),
@@ -56,25 +62,31 @@ def score(result) -> bool:
 
 
 def test_good_trajectory_passes_every_check():
-    assert score(calendar_checked_first(V2_LIKE, HAPPY))
     assert score(parallel_search(V2_LIKE, HAPPY))
     assert score(booking_consent(V2_LIKE, HAPPY))
+    assert score(avoided_unneeded_subagents(V2_LIKE, HAPPY))
     assert score(trajectory_superset_match(V2_LIKE, HAPPY))
 
 
-def test_v1_style_trajectory_fails_ordering_parallelism_and_consent():
-    assert not score(calendar_checked_first(V1_LIKE, HAPPY))
+def test_v1_style_trajectory_fails_parallelism_and_consent():
     assert not score(parallel_search(V1_LIKE, HAPPY))
     assert not score(booking_consent(V1_LIKE, HAPPY))
-    assert not score(trajectory_superset_match(V1_LIKE, HAPPY))
+
+
+def test_explicit_dates_skip_the_calendar():
+    checked_calendar = outputs(task("calendar-checker", "m1"), *V2_LIKE["steps"])
+    assert calendar_checked_first(checked_calendar, HAPPY) == NOT_APPLICABLE
+    assert not score(avoided_unneeded_subagents(checked_calendar, HAPPY))
+
+
+def test_flexible_dates_check_the_calendar_first():
+    calendar_then_search = outputs(task("calendar-checker", "m1"), task("flight-booker", "m2"))
+    assert score(calendar_checked_first(calendar_then_search, FLEXIBLE_DATES))
+    assert not score(calendar_checked_first(outputs(task("flight-booker", "m1")), FLEXIBLE_DATES))
 
 
 def test_booking_delegation_does_not_count_as_parallel_search():
-    searched_then_booked = outputs(
-        task("calendar-checker", "m1"),
-        task("flight-booker", "m2"),
-        task("hotel-booker", "m3", "Book hotel HT-1"),
-    )
+    searched_then_booked = outputs(task("flight-booker", "m1"), task("hotel-booker", "m2", "Book hotel HT-1"))
     assert not score(parallel_search(searched_then_booked, HAPPY))
 
 

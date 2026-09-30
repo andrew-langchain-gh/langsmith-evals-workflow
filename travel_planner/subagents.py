@@ -63,8 +63,8 @@ substitute a different hotel. If the booking is rejected, report that it was not
 calendar_checker: SubAgent = {
     "name": "calendar-checker",
     "description": (
-        "Checks the traveler's calendar. Give a date range and trip length; it returns conflicting events and free "
-        "windows long enough for the trip."
+        "Finds free dates in the traveler's calendar when their dates are flexible. Give a date range and trip "
+        "length; it returns conflicting events and free windows long enough for the trip."
     ),
     "system_prompt": f"""You are a calendar assistant.
 

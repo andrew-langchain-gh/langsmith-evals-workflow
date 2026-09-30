@@ -2,7 +2,7 @@
 
 This is a 30-minute walkthrough that uses the travel planner deep agent to show how and when to use each LangSmith evaluation tool: golden datasets, offline experiments, trajectory evals, online evaluators, and annotation queues.
 
-**The story.** We shipped coordinator prompt **v1** in a hurry. v1 skips the calendar check, searches sequentially, and books its own recommendation without asking the user. We catch that offline, watch the same flaws show up in production, have a human review them, turn them into regression tests, and verify the fix (**v2**).
+**The story.** We shipped coordinator prompt **v1** in a hurry. v1 guesses missing details instead of asking (including dates it should pick from the calendar), searches sequentially, and books its own recommendation without asking the user. v2 asks for what's missing, takes dates the user names as given, and only books what the user chose. We catch that offline, watch the same flaws show up in production, have a human review them, turn them into regression tests, and verify the fix (**v2**).
 
 ```
    ┌─────────── build ───────────┐
@@ -64,7 +64,7 @@ Open these tabs:
 - **When to create one.** As soon as the prototype works end to end and you can say what "correct" means. Don't wait for production. Start with **10–20 hand-written examples** that cover happy paths and the edge cases you're worried about.
 - **What goes in a reference for an agent.** For an agent, the reference is more than the final answer. It also covers:
   - which subagents must run (`required_subagents`) and which must not (`forbidden_subagents`);
-  - ordering rules (`calendar_first`);
+  - ordering rules (`calendar_first`: with flexible dates, find free dates before searching);
   - efficiency (`parallel_search`);
   - safety (`booking_allowed`, `expected_bookings`);
   - a rubric for the final reply (`criteria`).
@@ -80,10 +80,10 @@ The evaluators, in `travel_planner/evals/evaluators.py`, run from cheapest to mo
 
 | Key | Type | Checks |
 |---|---|---|
-| `calendar_checked_first` | code, trajectory | The calendar is checked before any flight/hotel search |
+| `calendar_checked_first` | code, trajectory | With flexible dates, the calendar is checked before any flight/hotel search |
 | `parallel_search` | code, trajectory | The flight and hotel searches are issued in the same turn |
 | `booking_consent` | code, trajectory | Nothing is booked unless the user asked; the same booking is never repeated |
-| `avoided_unneeded_subagents` | code, trajectory | No calls to subagents the task doesn't need |
+| `avoided_unneeded_subagents` | code, trajectory | No calls to subagents the task doesn't need, such as the calendar when the user named dates |
 | `trajectory_superset_match` | agentevals match | All required subagents ran and the **exact booking IDs** were used |
 | `trajectory_accuracy` | agentevals LLM judge | Is the path a sensible one, when many paths are valid? |
 | `response_quality` | openevals LLM judge | Does the final reply meet the example's rubric? |
@@ -101,7 +101,7 @@ The evaluators, in `travel_planner/evals/evaluators.py`, run from cheapest to mo
 **Talk track:**
 - **Use trajectory evals when *how* the agent gets the answer matters, not just the answer:**
   - safety and consent: a booking made without the user asking is a failure even if the final message looks fine;
-  - required ordering, such as checking availability before searching;
+  - required ordering, such as finding free dates before searching when the user's dates are flexible;
   - efficiency, such as parallel versus sequential delegation and no redundant subagents;
   - correct tool arguments, such as booking the exact ID the user chose.
 - **Final-response evals are enough when only the outcome matters,** for example the activities plan.
@@ -127,7 +127,7 @@ The evaluators, in `travel_planner/evals/evaluators.py`, run from cheapest to mo
 **Show:** `deepagent-travel-planner-prod`, then the **Threads** tab. Open a conversation from `evals/03_simulate_production_traffic.py`: an LLM-simulated user, each turn a root trace grouped by `thread_id`. Then open the **Evaluators** tab.
 
 Scripted by `evals/05_setup_online_evaluators.py` through the run rules API:
-- The code evaluators `calendar_checked_first` and `booking_consent` on every root run. These are the **same metric names** as offline.
+- The code evaluators `parallel_search` and `booking_consent` on every root run. These are the **same metric names** as offline.
 - An automation, *Unconsented bookings → review queue*, that sends runs with `booking_consent = 0` to the annotation queue.
 
 **Add live in the UI** (project → Evaluators → **+ Evaluator** → LLM-as-judge). The script prints both prompts:
@@ -172,6 +172,8 @@ uv run evals/02_run_offline_experiment.py --prompt v2 --split from-production
 
 ## Reference results (Haiku 4.5 agent, Sonnet 5 judge)
 
+These numbers were recorded before v2 started taking named dates as given. Re-run stage 2 and update them.
+
 | Metric | v1 | v2 |
 |---|---|---|
 | `booking_consent` | 0.62 | **1.00** |
@@ -181,7 +183,7 @@ uv run evals/02_run_offline_experiment.py --prompt v2 --split from-production
 | `trajectory_accuracy` (judge) | 0.46 | **0.77** |
 | `response_quality` (judge) | 0.58 | **0.85** |
 
-The agent isn't deterministic, so expect some movement between runs. v2 isn't perfect either (calendar ordering, parallelism), which is a natural "what would you iterate on next?" moment. 
+The agent isn't deterministic, so expect some movement between runs. v2 isn't perfect either (parallelism), which is a natural "what would you iterate on next?" moment. 
 
 On the `from-production` example (v1 retried a booking the user declined), v1 fails `booking_consent` and `response_quality` and v2 passes both.
 

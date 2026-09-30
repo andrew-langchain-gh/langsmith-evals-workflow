@@ -33,18 +33,20 @@ def _is_search(args):
     return args.get("subagent_type") in SEARCH_SUBAGENTS and not _is_booking(args)
 '''
 
-CALENDAR_CHECKED_FIRST = (
+PARALLEL_SEARCH = (
     _MESSAGE_HELPERS
     + '''
 
 def perform_eval(run):
-    """Before searching flights or hotels, did the agent check the traveler's calendar?"""
-    for args in _delegations(_messages(run)):
-        if args.get("subagent_type") == "calendar-checker":
-            return {"calendar_checked_first": True}
-        if _is_search(args):
-            return {"calendar_checked_first": False}
-    return {}
+    """When the agent searched both flights and hotels, did it issue both searches in the same turn?"""
+    first_search_turn = {}
+    for turn, m in enumerate(_messages(run)):
+        for args in _delegations([m]):
+            if _is_search(args):
+                first_search_turn.setdefault(args["subagent_type"], turn)
+    if len(first_search_turn) < 2:
+        return {}
+    return {"parallel_search": len(set(first_search_turn.values())) == 1}
 '''
 )
 
@@ -64,7 +66,7 @@ def perform_eval(run):
 )
 
 CODE_EVALUATORS = {
-    "calendar_checked_first": CALENDAR_CHECKED_FIRST,
+    "parallel_search": PARALLEL_SEARCH,
     "booking_consent": BOOKING_CONSENT,
 }
 
@@ -92,6 +94,6 @@ THREAD_JUDGE_PROMPT = """You are reviewing a complete conversation between a tra
 
 {{trajectory}}
 
-Did the assistant accomplish what the traveler actually wanted (options that fit their dates, budget and calendar,
+Did the assistant accomplish what the traveler actually wanted (options for the dates they asked for and their budget,
 bookings only for what they chose, a clear final answer) without the traveler having to repeat or correct it?
 Score 1 (failed) to 5 (fully accomplished) and explain briefly."""

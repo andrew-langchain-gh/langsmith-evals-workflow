@@ -1,7 +1,7 @@
 """Stage 5 - Online evaluators and automations on the production project.
 
 Scripted (via the run rules API):
-- Code evaluators `calendar_checked_first` and `booking_consent` on every root run (reference-free, the same
+- Code evaluators `parallel_search` and `booking_consent` on every root run (reference-free, the same
   metric names as offline, so quality can be tracked on both sides of the deploy).
 - An automation that routes runs flagged `booking_consent = 0` into the review annotation queue.
 
