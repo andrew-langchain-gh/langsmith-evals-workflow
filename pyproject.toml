@@ -5,11 +5,9 @@ description = "Deep Agents travel planner that delegates to flight, hotel, calen
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "agentevals>=0.0.9",
     "deepagents>=0.7.19",
     "langchain-anthropic>=1.7.4",
     "langsmith>=0.14.0",
-    "openevals>=0.2.0",
     "python-dotenv>=1.2.3",
 ]
 
