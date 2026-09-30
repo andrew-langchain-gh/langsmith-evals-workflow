@@ -58,26 +58,17 @@ uv run langgraph dev
 uv run pytest
 ```
 
-These tests cover the mock tools and the offline/online evaluators, and make no LLM calls.
+These tests cover the mock tools and make no LLM calls.
 
-## Evaluation lifecycle demo
+## Evaluation demo
 
-`evals/` holds numbered scripts that walk through the agent development lifecycle in LangSmith: a golden dataset, offline experiments with trajectory evaluators, simulated production traffic, online evaluators and automations, an annotation queue, and promoting reviewed runs back into the dataset. The story compares a flawed v1 coordinator prompt with the fixed v2 (`travel_planner/prompts.py`, selected with `TRAVEL_PLANNER_PROMPT_VERSION`).
+`evals/` holds four numbered scripts for a LangSmith evaluation walkthrough. They cover a hand-curated golden dataset, an experiment scored by a correctness judge built in the UI, simulated production traffic for online evaluators, and a trajectory evaluator on a dataset built from a reviewed trace. The evaluators, rules, and queue are created live in the LangSmith UI.
 
-See **[docs/DEMO.md](docs/DEMO.md)** for the presenter runbook and the "when to use what" guide.
+See **[docs/DEMO.md](docs/DEMO.md)** for the presenter runbook.
 
-| Script | Stage |
+| Script | Step |
 |---|---|
 | `evals/00_reset_demo.py` | Delete everything the demo created in LangSmith, to start over |
-| `evals/01_create_golden_dataset.py` | Golden dataset with splits and a `baseline` version tag |
-| `evals/02_run_offline_experiment.py --prompt v1\|v2` | Offline experiment: code, trajectory and LLM-judge evaluators |
-| `evals/03_simulate_production_traffic.py` | Multi-turn simulated users against the "deployed" prompt |
-| `evals/04_setup_annotation_queue.py` | Rubric feedback configs and the review queue |
-| `evals/05_setup_online_evaluators.py` | Online code evaluators and a flagged-runs → queue automation |
-| `evals/06_promote_reviewed_to_dataset.py` | Reviewed corrections become `from-production` golden examples |
-
-Eval code lives in `travel_planner/evals/`: the harness, the offline and online evaluators, and the golden examples.
-
-## Mock data → real APIs
-
-`travel_planner/mock_data.py` seeds its generators from the tool arguments, so the same query always returns the same results for any city or date. To go live, replace a tool's body in `travel_planner/tools/` with a real API call and keep the tool's name, signature, and ID prefixes (`FL-`, `HT-`). The subagent prompts in `travel_planner/subagents.py` can stay as they are. Real bookings should get a human approval step first: add `interrupt_on` for `book_flight` and `book_hotel` to those subagents.
+| `evals/01_create_golden_dataset.py` | 1. Five hand-written `question` → `answer` examples |
+| `evals/02_run_experiment.py [--dataset NAME]` | 2 and 4. Run the agent over a dataset; UI-bound evaluators score it |
+| `evals/03_generate_traffic.py` | 3. One-shot requests sent to the "deployed" agent's prod project |

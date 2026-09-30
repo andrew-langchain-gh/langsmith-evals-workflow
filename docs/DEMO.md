@@ -1,207 +1,114 @@
-# Demo Runbook: The Agent Development Lifecycle in LangSmith
+# Demo Runbook: Evaluating an Agent with LangSmith
 
-This is a 30-minute walkthrough that uses the travel planner deep agent to show how and when to use each LangSmith evaluation tool: golden datasets, offline experiments, trajectory evals, online evaluators, and annotation queues.
-
-**The story.** We shipped coordinator prompt **v1** in a hurry. v1 guesses missing details instead of asking (including dates it should pick from the calendar), searches sequentially, and books its own recommendation without asking the user. v2 asks for what's missing, takes dates the user names as given, and only books when the user asks it to. We catch that offline, watch the same flaws show up in production, have a human review them, turn them into regression tests, and verify the fix (**v2**).
+A walkthrough in four steps that uses the travel planner deep agent to show a golden dataset, an offline LLM-as-judge evaluator, online evaluators on production traffic, and a trajectory evaluator on a dataset built from real traces. Most of the work happens in the LangSmith UI. The scripts only create data and run the agent.
 
 ```
-   ┌─────────── build ───────────┐
-   │  prototype agent (mocks)    │
-   └──────────────┬──────────────┘
-                  ▼
-   golden dataset ──► offline experiments ──► compare v1 vs v2 ──► ship
-        ▲                (incl. trajectories)                       │
-        │                                                           ▼
-   add to dataset ◄── annotation queue ◄── automation ◄── online evaluators
-   (from-production)    (human review)       rules        on prod traffic
+ 1. golden dataset ──► 2. offline experiment ──► 3. deploy + online evals ──► 4. trace → queue → dataset
+   (hand-curated)       (correctness judge)        (toxicity on live traffic)     (trajectory evaluator)
 ```
 
 ## Pre-demo checklist
 
-Live experiments take a few minutes, so run everything beforehand and keep one live run for the stage.
-
 ```sh
-uv sync && cp .env.example .env                       # ANTHROPIC_API_KEY + LangSmith keys
-uv run pytest                                         # evaluator + tool unit tests, no LLM calls
-uv run evals/00_reset_demo.py                         # optional: wipe a previous run (asks to confirm)
-uv run evals/01_create_golden_dataset.py              # dataset + splits + 'baseline' tag
-uv run evals/02_run_offline_experiment.py --prompt v1
-uv run evals/02_run_offline_experiment.py --prompt v2
-uv run evals/03_simulate_production_traffic.py --prompt v1   # "production" traffic
-uv run evals/04_setup_annotation_queue.py
-uv run evals/05_setup_online_evaluators.py            # then add the two LLM judges in the UI (stage 5)
-# wait ~5 minutes for online evaluators and rules to run, then:
-uv run evals/04_setup_annotation_queue.py --enqueue-flagged   # optional: don't wait for the rule to poll
+uv sync && cp .env.example .env              # ANTHROPIC_API_KEY + LangSmith keys
+uv run pytest                                # tool unit tests, no LLM calls
+uv run evals/00_reset_demo.py                # optional: wipe a previous run (asks to confirm)
+uv run evals/01_create_golden_dataset.py
 ```
 
-Before going on stage, review 2–3 queue items yourself and add a `correction` to at least one of them, so stage 6 has something to promote.
-
-Open these tabs:
-- the dataset `travel-planner-golden`
-- the v1/v2 experiment comparison
-- the prod project `deepagent-travel-planner-prod`
-- the annotation queue `travel-planner-review`
-
-## Agenda
-
-| Time | Stage | Show |
-|---|---|---|
-| 0–3 | Why evals for agents | The lifecycle diagram above, and the agent architecture from the README |
-| 3–9 | 1–2 Golden dataset and offline experiment | Dataset, splits, v1 experiment results |
-| 9–14 | Trajectories | The v1 trace and the trajectory evaluator scores |
-| 14–17 | Fix and compare | The v2 experiment and the comparison view |
-| 17–23 | 3 + 5 Production and online evals | Prod threads, evaluator feedback, the automation rule |
-| 23–28 | 4 + 6 Annotation queue, then the dataset | Review one item and promote it |
-| 28–30 | Recap | The "when to use" table below |
+- **Dates:** the examples in `evals/01_create_golden_dataset.py` and `evals/03_generate_traffic.py` name dates without a year (October–December). If the demo happens after those dates, move them forward.
+- **Workspace secret:** the UI evaluators need a model key. Go to Settings → Secrets and add `ANTHROPIC_API_KEY` (or the key for your judge model's provider).
+- **Rehearse step 4 in advance:** online evaluators and automation rules take a few minutes to fire. Run `03` well before going on stage so the queue already has items.
 
 ---
 
-## Stage 1: Golden dataset (`evals/01_create_golden_dataset.py`)
+## Step 1: A hand-curated golden dataset (`evals/01_create_golden_dataset.py`)
 
-**Show:** Datasets & Experiments → `travel-planner-golden`. Open an example and walk through its reference outputs.
-
-**Talk track:**
-- **When to create one.** As soon as the prototype works end to end and you can say what "correct" means. Don't wait for production. Start with **10–20 hand-written examples** that cover happy paths and the edge cases you're worried about.
-- **What goes in a reference for an agent.** For an agent, the reference is more than the final answer. It also covers:
-  - which subagents must run (`required_subagents`) and which must not (`forbidden_subagents`);
-  - ordering rules (`calendar_first`: with flexible dates, find free dates before searching);
-  - efficiency (`parallel_search`);
-  - safety (`booking_allowed`, `expected_bookings`);
-  - a rubric for the final reply (`criteria`).
-- **Splits.** `core` holds must-never-regress behaviors and `edge` holds tricky cases. Later, `from-production` holds cases learned from real traffic. You can run just `--split core` as a fast pre-merge gate.
-- **Versions.** The dataset is tagged `baseline`, so you can always re-run against the original examples with `--as-of baseline` even after the dataset grows.
-- **Deterministic mocks help here.** The mock tools always return the same data, so references like `HT-606278` or "conference talk on Dec 8–10" are stable, and trajectory matching stays meaningful.
-
-## Stage 2: Offline experiment (`evals/02_run_offline_experiment.py`)
-
-**Show:** The `prompt-v1-*` experiment. Sort by `booking_consent` and open a failing row.
-
-The evaluators, in `travel_planner/evals/evaluators.py`, run from cheapest to most expensive:
-
-| Key | Type | Checks |
-|---|---|---|
-| `calendar_checked_first` | code, trajectory | With flexible dates, the calendar is checked before any flight/hotel search |
-| `parallel_search` | code, trajectory | The flight and hotel searches are issued in the same turn |
-| `booking_consent` | code, trajectory | Nothing is booked unless the user asked; the same booking is never repeated |
-| `avoided_unneeded_subagents` | code, trajectory | No calls to subagents the task doesn't need, such as the calendar when the user named dates |
-| `trajectory_superset_match` | agentevals match | All required subagents ran and the **exact booking IDs** were used |
-| `trajectory_accuracy` | agentevals LLM judge | Is the path a sensible one, when many paths are valid? |
-| `response_quality` | openevals LLM judge | Does the final reply meet the example's rubric? |
-| `all_checks_pass_rate` | summary | Share of examples passing every deterministic check (a regression gate) |
+**Show:** The `EXAMPLES` list in the script, then Datasets & Experiments → `travel-planner-golden`.
 
 **Talk track:**
-- Offline experiments are how you **compare versions before shipping**: prompts, models, tools, and architecture changes.
-- Put cheap deterministic checks first. Use LLM judges for what code can't check.
-- Experiment metadata records `prompt_version` and `model`, so you can filter and group by them.
+- "There are many ways to get started evaluating an agent by building a golden dataset: collecting agent traces, building a human-curated dataset by hand, or synthetically generating data with the help of an LLM. For this demonstration we will curate a dataset by hand."
+- Each example is a `question` and the `answer` a travel expert expects, in the same shape as the [chatbot tutorial](https://docs.langchain.com/langsmith/evaluate-chatbot-tutorial).
+- The answers are **key facts**, not a word-for-word reply: what was booked, for whom, when, and where. A good agent can write a different itinerary and still be correct.
+- One example says "don't book anything yet". Sometimes the correct answer is to **not act**.
 
-## Trajectories: when to use them
+## Step 2: A correctness evaluator, then an experiment (`evals/02_run_experiment.py`)
 
-**Show:** A v1 trace, expanded. Point out the coordinator's `task` calls and the subagents' `search_flights`/`book_flight` calls under them. Then show a failing `trajectory_superset_match` and the harness's flattened `trajectory` output.
+**Build the evaluator in the UI:** open `travel-planner-golden` → **Evaluators** → **+ Evaluator** → **Create from a template** → **Correctness**.
+- Map the variables:
+  - input → `inputs.question`
+  - output → `outputs.answer`
+  - reference output → `reference_outputs.answer`
+- Model: Claude Sonnet (a stronger judge than the Haiku agent). Output: boolean. Feedback key: `correctness`.
+- Optionally, add a **Conciseness** template the same way.
 
-**Talk track:**
-- **Use trajectory evals when *how* the agent gets the answer matters, not just the answer:**
-  - safety and consent: a booking made without the user asking is a failure even if the final message looks fine;
-  - required ordering, such as finding free dates before searching when the user's dates are flexible;
-  - efficiency, such as parallel versus sequential delegation and no redundant subagents;
-  - correct tool arguments, such as booking the exact ID the user chose.
-- **Final-response evals are enough when only the outcome matters,** for example the activities plan.
-- **Match evaluators vs trajectory judges.**
-  - Use **match** evaluators (strict, unordered, subset, superset) when the correct path is known and deterministic. Here we use superset with `tool_args_match_overrides`, so only `subagent_type` and the booking IDs are compared.
-  - Use the **LLM trajectory judge** when many paths are valid. Give it your architecture: the first version of our judge marked correct delegation as "duplicate work" until the prompt explained what a `[subagent]` step is.
-- **Multi-agent tip.** A deep agent's subagent calls live in nested runs. The harness (`travel_planner/evals/harness.py`) streams with `subgraphs=True` and flattens the coordinator and subagent calls into one trajectory, so a single evaluator can see the whole system.
-
-**Judge lessons from building this demo** (good talking points):
-- **A judge needs your architecture.** The first trajectory judge graded correct delegation as "duplicate work" and read results out of order. The trajectory now nests subagent steps before each `task` result, and the prompt explains `[subagent]` steps.
-- **Judge model matters.** With Haiku 4.5 as the judge, `trajectory_accuracy` scored v1 and v2 the same, 0.62. With Sonnet 5 it separates them: 0.46 vs 0.77. The judge defaults to Sonnet 5 (`EVAL_JUDGE_MODEL`), and the agent runs on Haiku.
-- **Enforce the judge's output schema.** Claude sometimes omitted the `score` field under tool-calling structured output. `StrictChatAnthropic` forces native `json_schema` output.
-- **Re-score without re-running the agent.** `client.evaluate("<experiment-name>", evaluators=[...])` adds new evaluators to an existing experiment. Use it when you change a judge.
-
-## Fix and compare
-
-**Show:** Select the v1 and v2 experiments and click **Compare**. Point to the per-metric deltas, then open one example side by side.
-
-**Talk track:** v2's prompt (`travel_planner/prompts.py`) fixes the specific failures the evaluators found. The comparison view is the ship/no-ship decision.
-
-## Stages 3 and 5: Production traffic and online evaluators
-
-**Show:** `deepagent-travel-planner-prod`, then the **Threads** tab. Open a conversation from `evals/03_simulate_production_traffic.py`: an LLM-simulated user, each turn a root trace grouped by `thread_id`. Then open the **Evaluators** tab.
-
-Scripted by `evals/05_setup_online_evaluators.py` through the run rules API:
-- The code evaluators `parallel_search` and `booking_consent` on every root run. These are the **same metric names** as offline.
-- An automation, *Unconsented bookings → review queue*, that sends runs with `booking_consent = 0` to the annotation queue.
-
-**Add live in the UI** (project → Evaluators → **+ Evaluator** → LLM-as-judge). The script prints both prompts:
-1. **`booking_safety_judge`** (run level)
-   - Filter: root runs. Sampling: 100% for the demo; say 10–20% in production.
-   - Model: Claude Haiku 4.5.
-   - Map `input` to the run inputs and `output` to the run outputs. Output is a boolean.
-2. **`task_completion`** (Source: **Threads**)
-   - It uses `{{trajectory}}`, so the judge sees tool calls too. Output is a score from 1 to 5.
-   - It runs after the thread has been idle (configurable, minimum 2 minutes).
-
-**Talk track:**
-- **When to use online evaluators:** after you ship, on real traffic where there are **no reference outputs**. That means reference-free checks: safety, policy, format, task completion, and user frustration.
-- Code evaluators are free and deterministic, so run them on 100% of traffic. LLM judges cost money, so sample them.
-- Thread-level evaluators score the whole conversation. A single turn can look fine while the conversation fails.
-- Online metrics tell you **that** something is wrong in production. Automations route those runs to the right place: a queue, a dataset, or a webhook.
-
-## Stages 4 and 6: Annotation queue, then the dataset
-
-**Show:** The `travel-planner-review` queue. Open a flagged run and fill in the rubric:
-- `booking_safety` (safe/unsafe);
-- `plan_quality` (1–5);
-- `correction` (what it should have done).
-
-Then either click **Add to Dataset** (the golden dataset is the queue's default) or run:
+**Run the experiment:**
 
 ```sh
-uv run evals/06_promote_reviewed_to_dataset.py
-uv run evals/02_run_offline_experiment.py --prompt v2 --split from-production
+uv run evals/02_run_experiment.py
 ```
 
-`06` frames the correction as a regression rubric ("don't repeat this failure"). Earlier turns are replayed as text, so a better agent may never reach that situation.
+**Show:** The script contains no evaluator code at all. The experiment's `correctness` column is filled in by the evaluator you just bound to the dataset. Open a row and compare the agent's answer with the reference and the judge's reasoning.
 
 **Talk track:**
-- **When to use annotation queues:**
-  - automated scores are low, uncertain, or disagree with each other;
-  - a judgement needs domain expertise;
-  - you're **calibrating an LLM judge** against human labels;
-  - you want to turn production cases into corrected reference examples.
-- Reviewers get a rubric (feedback configs) so labels are consistent and can be aggregated.
-- The loop closes when the reviewer's correction becomes the rubric for a new `from-production` example. The next experiment tests v2 against the exact failure found in production, and the `after-prod-review` tag marks the new dataset version.
+- An evaluator bound to a dataset runs automatically on **every** experiment against that dataset. Subject-matter experts can own the rubric in the UI while engineers own the code.
+- Correctness is **reference-based**: it needs the expected answer. Keep that in mind for step 3.
 
-## Reference results (Haiku 4.5 agent, Sonnet 5 judge)
+## Step 3: Deploy and watch (`evals/03_generate_traffic.py`)
 
-These numbers were recorded before v2 started taking named dates as given. Re-run stage 2 and update them.
+**Talk track:** "Once you have a baseline of dataset examples and evaluators, it is time to deploy the agent and watch its behavior."
 
-| Metric | v1 | v2 |
+```sh
+uv run evals/03_generate_traffic.py
+```
+
+**Show:** The `deepagent-travel-planner-prod` project. About 18 traces of one-shot requests: ordinary bookings, a few rude users, and a few requests the agent can't fully satisfy, such as a Paris hotel under $50 or a return date before the departure date. Point out that the project has **no online evaluators yet**.
+
+**Add online evaluators:** project → **Evaluators** → **+ Evaluator** → **Create from a template** → **Safety** → **Toxicity**.
+- Filter: root runs. Sampling: 100% for the demo; say 10–20% in production.
+- Map the text variable to the run **input** (the user's message). Here we're flagging abusive users; the agent's replies stay polite.
+
+**Talk track:**
+- Production traffic has **no reference answers**, so correctness can't run here. Online evaluators must be **reference-free**: toxicity, safety, format, and policy checks.
+- Online metrics tell you **that** something is happening in production. Step 4 turns those traces into something you can test against.
+
+## Step 4: From a trace to a trajectory evaluator
+
+**1. Create an annotation queue:** Annotation queues → **+ New queue** → `travel-planner-review`.
+
+**2. Create an automation rule:** prod project → **Automations** → **+ Rule**.
+- Filter: feedback `toxicity` = true. You can also use a sample rate, since any filter works.
+- Action: **Add to annotation queue** → `travel-planner-review`.
+- Talk track: rules run on new traces, and you can apply them to past traces when you create the rule.
+
+**3. Review one item in the queue.** Open the trace and point out the **trajectory**: the coordinator's `task` tool calls to `flight-booker`, `hotel-booker`, and `activity-planner`, and the results each one returned (flight IDs, hotel IDs, confirmation codes). Click **Add to dataset** → **+ New dataset** → `travel-planner-trajectories`. The example's reference output is the run's `messages`, which is the trajectory a reviewer just approved.
+
+**4. Bind a trajectory evaluator:** `travel-planner-trajectories` → **Evaluators** → **+ Evaluator** → **Create from a template** → **Trajectory**.
+- Map the output messages to `outputs.messages` and the reference to `reference_outputs.messages`.
+
+**5. Run the experiment against the new dataset:**
+
+```sh
+uv run evals/02_run_experiment.py --dataset travel-planner-trajectories
+```
+
+**Talk track:**
+- Final-answer evaluators check **what** the agent said. Trajectory evaluators check **how** it got there: which subagents it delegated to, in what order, and with which IDs. A reply can look correct even when the agent booked the wrong thing or skipped a step.
+- The reference trajectory came from production and a human approved it. The loop is closed: **traffic → review → dataset → experiment**.
+
+## Recap
+
+| Tool | Use it when | In this demo |
 |---|---|---|
-| `booking_consent` | 0.62 | **1.00** |
-| `calendar_checked_first` | 0.60 | **0.80** |
-| `parallel_search` | 0.50 | **0.75** |
-| `trajectory_superset_match` | 0.90 | 0.90 |
-| `trajectory_accuracy` (judge) | 0.46 | **0.77** |
-| `response_quality` (judge) | 0.58 | **0.85** |
-
-The agent isn't deterministic, so expect some movement between runs. v2 isn't perfect either (parallelism), which is a natural "what would you iterate on next?" moment. 
-
-On the `from-production` example recorded before approvals were removed (v1 retried a declined booking), v1 failed `booking_consent` and `response_quality` and v2 passed both.
-
-## When to use what (recap slide)
-
-| Tool | Use it when | Signal |
-|---|---|---|
-| **Golden dataset** | The prototype works and you can define "correct". Grow it from production failures. | Curated inputs with references, versioned and split |
-| **Offline experiments** | Before every change: prompts, models, tools, architecture | Side-by-side comparison of versions |
-| **Trajectory evals** | *How* the agent acts matters: safety, ordering, efficiency, tool args | Match evaluators for known paths, LLM judge for open-ended ones |
-| **Online evaluators** | After shipping, on sampled real traffic with no references | Reference-free quality and safety trends, per run and per thread |
-| **Automation rules** | Online signals should trigger an action | Route to a queue or dataset, or call a webhook |
-| **Annotation queues** | A human needs to judge, correct, or calibrate | Rubric labels plus corrected examples |
+| **Golden dataset** | You can say what "correct" looks like | 5 hand-written questions and answers |
+| **Offline evaluator** | Comparing versions before shipping, with a reference | Correctness judge bound to the dataset |
+| **Online evaluator** | After shipping, on real traffic without references | Toxicity on the prod project |
+| **Automation rule** | An online signal should trigger an action | Flagged runs → annotation queue |
+| **Annotation queue** | A human needs to judge or curate | Review a trace and add it to a dataset |
+| **Trajectory evaluator** | *How* the agent acts matters, not just the answer | Compare the path against a reviewed trace |
 
 ---
 
 ## Appendix: Resetting between rehearsals
 
-- `uv run evals/00_reset_demo.py` deletes everything the demo created in LangSmith: experiments, the dataset, the prod project with its rules and online evaluators, and the queue.
-- `uv run evals/01_create_golden_dataset.py --recreate` rebuilds only the dataset. This removes `from-production` examples.
-- Pass `--no-llm-judges` to `02` for a fast, cheap run while rehearsing.
+`uv run evals/00_reset_demo.py` deletes everything the demo created in LangSmith: both datasets, their experiments and bound evaluators, the prod project with its online evaluators and rules, and the queue. Then start again from step 1.
