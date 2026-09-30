@@ -70,6 +70,7 @@ See **[docs/DEMO.md](docs/DEMO.md)** for the presenter runbook and the "when to 
 
 | Script | Stage |
 |---|---|
+| `evals/00_reset_demo.py` | Delete everything the demo created in LangSmith, to start over |
 | `evals/01_create_golden_dataset.py` | Golden dataset with splits and a `baseline` version tag |
 | `evals/02_run_offline_experiment.py --prompt v1\|v2` | Offline experiment: code, trajectory and LLM-judge evaluators |
 | `evals/03_simulate_production_traffic.py` | Multi-turn simulated users against the "deployed" prompt |

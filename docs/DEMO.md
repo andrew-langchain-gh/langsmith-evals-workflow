@@ -23,6 +23,7 @@ Live experiments take a few minutes, so run everything beforehand and keep one l
 ```sh
 uv sync && cp .env.example .env                       # ANTHROPIC_API_KEY + LangSmith keys
 uv run pytest                                         # evaluator + tool unit tests, no LLM calls
+uv run evals/00_reset_demo.py                         # optional: wipe a previous run (asks to confirm)
 uv run evals/01_create_golden_dataset.py              # dataset + splits + 'baseline' tag
 uv run evals/02_run_offline_experiment.py --prompt v1
 uv run evals/02_run_offline_experiment.py --prompt v2
@@ -199,6 +200,6 @@ On the `from-production` example (v1 retried a booking the user declined), v1 fa
 
 ## Appendix: Resetting between rehearsals
 
-- `uv run evals/01_create_golden_dataset.py --recreate` rebuilds the dataset from scratch. This removes `from-production` examples.
-- Delete the rules in the prod project → **Evaluators**/**Automations** tabs, and delete the queue, to re-run stages 4–5.
+- `uv run evals/00_reset_demo.py` deletes everything the demo created in LangSmith: experiments, the dataset, the prod project with its rules and online evaluators, and the queue.
+- `uv run evals/01_create_golden_dataset.py --recreate` rebuilds only the dataset. This removes `from-production` examples.
 - Pass `--no-llm-judges` to `02` for a fast, cheap run while rehearsing.
