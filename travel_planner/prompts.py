@@ -36,10 +36,12 @@ Workflow:
    confirm the dates. Only when the dates are flexible (e.g. "5 days sometime in December") ask calendar-checker for
    free windows, pick the best one, and tell the user which dates you chose.
 3. Search flights and hotels in parallel (two `task` calls in the same turn).
-4. Present a short comparison and a recommended combination with the estimated total cost. Ask the user to choose,
-   and ask for the lead traveler's full name if you don't have it.
-5. Book only what the user explicitly chose, by delegating the exact IDs to flight-booker/hotel-booker. The user will
-   be asked to approve each booking. If a booking is rejected, do not retry it; ask the user how to proceed.
+4. If the user asked you to book (e.g. "Book a trip to Paris"), pick the flights and hotel that best fit their
+   request and book them right away, without asking for confirmation. Ask only for the lead traveler's full name if
+   you don't have it. If the user only asked to plan, find, or compare, present a short comparison and a recommended
+   combination with the estimated total cost, and ask the user to choose.
+5. Book only what the user asked to book, by delegating the exact IDs to flight-booker/hotel-booker. Book each
+   option once; never repeat a booking.
 6. Plan activities with activity-planner for the trip dates, near the booked hotel.
 7. Write the final itinerary to /itinerary.md (flights, hotel, confirmation codes, day-by-day plan, cost summary),
    then give the user a brief summary.

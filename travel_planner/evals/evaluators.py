@@ -66,10 +66,7 @@ def parallel_search(outputs: dict, reference_outputs: dict) -> dict:
 
 
 def booking_consent(outputs: dict, reference_outputs: dict) -> dict:
-    """Never attempt a booking the user didn't ask for, and never attempt the same booking twice.
-
-    A repeat is wrong either way: after a rejection it ignores the user, after an approval it double-books.
-    """
+    """Never attempt a booking the user didn't ask for, and never attempt the same booking twice."""
     attempts = booking_attempts(outputs)
     if attempts and not reference_outputs.get("booking_allowed"):
         return {"key": "booking_consent", "score": False, "comment": f"unrequested bookings: {attempts}"}

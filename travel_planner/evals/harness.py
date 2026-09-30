@@ -7,7 +7,6 @@ from langchain_core.utils.uuid import uuid7
 from langgraph.checkpoint.memory import InMemorySaver
 
 from travel_planner.agent import build_agent
-from travel_planner.hitl import run_turn
 
 
 class TrajectoryRecorder:
@@ -15,8 +14,7 @@ class TrajectoryRecorder:
 
     Each step keeps the id of the AI message that issued it, so calls issued together (in parallel) share a
     `message_id`. `call_seq`/`result_seq` record when the call and its result appeared in the stream, so a `task`
-    call's result lands after the subagent steps it spawned. Steps are keyed by tool call id because resuming after
-    an interrupt can re-emit the same call.
+    call's result lands after the subagent steps it spawned.
     """
 
     def __init__(self) -> None:
@@ -51,15 +49,6 @@ class TrajectoryRecorder:
     @property
     def steps(self) -> list[dict]:
         return list(self._steps.values())
-
-
-def approval_policy(policy: str):
-    def decide(action: dict, allowed: list[str]) -> dict:
-        if policy == "approve":
-            return {"type": "approve"}
-        return {"type": "reject", "message": "The user did not approve this booking. Do not retry it."}
-
-    return decide
 
 
 RESULT_PREVIEW_CHARS = 600
@@ -101,13 +90,9 @@ def run_agent(inputs: dict, prompt_version: str | None = None) -> dict:
     config: RunnableConfig = {"configurable": {"thread_id": str(uuid7())}}
     recorder = TrajectoryRecorder()
 
-    run_turn(
-        agent,
-        {"messages": [dict(m) for m in inputs["messages"]]},  # the graph converts messages in place
-        config,
-        approval_policy(inputs.get("approval_policy", "reject")),
-        recorder.on_chunk,
-    )
+    payload = {"messages": [dict(m) for m in inputs["messages"]]}  # the graph converts messages in place
+    for chunk in agent.stream(payload, config=config, stream_mode="updates", subgraphs=True, version="v2"):
+        recorder.on_chunk(chunk)
 
     final_response = agent.get_state(config).values["messages"][-1].text
     return {

@@ -1,5 +1,4 @@
 from deepagents import SubAgent
-from langchain.agents.middleware import InterruptOnConfig
 
 from travel_planner.tools import (
     book_flight,
@@ -11,8 +10,6 @@ from travel_planner.tools import (
     search_flights,
     search_hotels,
 )
-
-BOOKING_APPROVAL: InterruptOnConfig = {"allowed_decisions": ["approve", "edit", "reject"]}
 
 STATELESS_RULES = """\
 You are called once per task and keep no memory between calls, so finish the whole job in this single run.
@@ -35,9 +32,8 @@ Search mode: call search_flights, then return the best 3 outbound (and return, i
 flight_id, airline, departure time, duration, stops, and total price. Recommend one and say why in one line.
 
 Booking mode: call book_flight exactly once per flight_id you were given. Do not search first and do not substitute a
-different flight. If the booking is rejected, report that it was not booked and stop.""",
+different flight.""",
     "tools": [search_flights, book_flight],
-    "interrupt_on": {"book_flight": BOOKING_APPROVAL},
 }
 
 hotel_booker: SubAgent = {
@@ -55,9 +51,8 @@ Search mode: call search_hotels, then return the best 3 options as a table with 
 nightly price, and total price. Recommend one and say why in one line.
 
 Booking mode: call book_hotel exactly once with the hotel_id and dates you were given. Do not search first and do not
-substitute a different hotel. If the booking is rejected, report that it was not booked and stop.""",
+substitute a different hotel.""",
     "tools": [search_hotels, book_hotel],
-    "interrupt_on": {"book_hotel": BOOKING_APPROVAL},
 }
 
 calendar_checker: SubAgent = {

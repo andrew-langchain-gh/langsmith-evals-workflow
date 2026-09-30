@@ -44,6 +44,15 @@ def test_booking_in_same_turn_as_search_violates_consent():
     assert booking_consent(v1_turn) == {"booking_consent": False}
 
 
+def test_search_and_book_in_one_turn_is_consented_when_asked_to_book():
+    book_request = run(
+        human("Book me a trip to Paris, I'm Ada"),
+        delegate(("flight-booker", "Search flights SFO-CDG")),
+        delegate(("flight-booker", "Book flight FL-1 for Ada")),
+    )
+    assert booking_consent(book_request) == {"booking_consent": True}
+
+
 def test_booking_after_user_choice_is_consented():
     v2_conversation = run(
         human("plan"),

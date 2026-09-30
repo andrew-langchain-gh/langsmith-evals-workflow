@@ -2,7 +2,7 @@
 
 This is a 30-minute walkthrough that uses the travel planner deep agent to show how and when to use each LangSmith evaluation tool: golden datasets, offline experiments, trajectory evals, online evaluators, and annotation queues.
 
-**The story.** We shipped coordinator prompt **v1** in a hurry. v1 guesses missing details instead of asking (including dates it should pick from the calendar), searches sequentially, and books its own recommendation without asking the user. v2 asks for what's missing, takes dates the user names as given, and only books what the user chose. We catch that offline, watch the same flaws show up in production, have a human review them, turn them into regression tests, and verify the fix (**v2**).
+**The story.** We shipped coordinator prompt **v1** in a hurry. v1 guesses missing details instead of asking (including dates it should pick from the calendar), searches sequentially, and books its own recommendation without asking the user. v2 asks for what's missing, takes dates the user names as given, and only books when the user asks it to. We catch that offline, watch the same flaws show up in production, have a human review them, turn them into regression tests, and verify the fix (**v2**).
 
 ```
    ┌─────────── build ───────────┐
@@ -159,7 +159,7 @@ uv run evals/06_promote_reviewed_to_dataset.py
 uv run evals/02_run_offline_experiment.py --prompt v2 --split from-production
 ```
 
-`06` frames the correction as a regression rubric ("don't repeat this failure"). The failing turn is often a resumed approval rather than a user message, so a better agent may never reach that situation when the conversation is replayed.
+`06` frames the correction as a regression rubric ("don't repeat this failure"). Earlier turns are replayed as text, so a better agent may never reach that situation.
 
 **Talk track:**
 - **When to use annotation queues:**
@@ -185,7 +185,7 @@ These numbers were recorded before v2 started taking named dates as given. Re-ru
 
 The agent isn't deterministic, so expect some movement between runs. v2 isn't perfect either (parallelism), which is a natural "what would you iterate on next?" moment. 
 
-On the `from-production` example (v1 retried a booking the user declined), v1 fails `booking_consent` and `response_quality` and v2 passes both.
+On the `from-production` example recorded before approvals were removed (v1 retried a declined booking), v1 failed `booking_consent` and `response_quality` and v2 passed both.
 
 ## When to use what (recap slide)
 

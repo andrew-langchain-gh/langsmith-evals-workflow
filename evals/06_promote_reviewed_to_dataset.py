@@ -31,8 +31,7 @@ def conversation(run) -> list[dict]:
 
 
 def regression_rubric(correction: str) -> str:
-    """The failing turn may have been a resumed approval rather than a user message, so a better agent may never
-    reach the same situation when the conversation is replayed. Grade "doesn't repeat the failure"."""
+    """Earlier turns are replayed as text, so a better agent may never reach the same situation. Grade "doesn't repeat the failure"."""
     return (
         f"In production, the assistant failed at this point in the conversation. Reviewer's correction: {correction} "
         "Pass if the reply avoids that failure, or if the situation never arises and the reply is otherwise an "
@@ -64,7 +63,7 @@ def main():
         messages = conversation(run)
         examples.append(
             {
-                "inputs": {"messages": messages, "approval_policy": "reject"},
+                "inputs": {"messages": messages},
                 "outputs": {
                     "required_subagents": [],
                     "forbidden_subagents": [],

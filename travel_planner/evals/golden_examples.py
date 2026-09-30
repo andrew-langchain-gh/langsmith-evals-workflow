@@ -8,7 +8,7 @@ Reference output fields:
 - forbidden_subagents: subagents that must not be called
 - calendar_first: flexible dates, so free dates must be found before any flight/hotel search
 - parallel_search: flight and hotel searches must be issued in the same turn
-- booking_allowed: whether the user consented to booking in this request
+- booking_allowed: whether the user asked to book in this request
 - expected_bookings: exact IDs the agent should try to book
 - criteria: rubric for the LLM judge that grades the final response
 - reference_trajectory: OpenAI-format trajectory used by the superset match
@@ -43,19 +43,19 @@ def example(
     forbidden: Sequence[str] = (),
     calendar_first: bool = False,
     parallel_search: bool = False,
-    approval_policy: str = "reject",
     expected_bookings: dict[str, list[str]] | None = None,
+    booking_allowed: bool | None = None,
 ) -> dict:
     messages = user(text)
     bookings = expected_bookings or {}
     return {
-        "inputs": {"messages": messages, "approval_policy": approval_policy},
+        "inputs": {"messages": messages},
         "outputs": {
             "required_subagents": list(required),
             "forbidden_subagents": list(forbidden),
             "calendar_first": calendar_first,
             "parallel_search": parallel_search,
-            "booking_allowed": bool(bookings),
+            "booking_allowed": bool(bookings) if booking_allowed is None else booking_allowed,
             "expected_bookings": bookings,
             "criteria": criteria,
             "reference_trajectory": reference_trajectory(messages, list(required), bookings),
@@ -148,6 +148,19 @@ def build_examples() -> list[dict]:
             required=["calendar-checker"],
             calendar_first=True,
         ),
+        # Book request: the user asked to book without picking IDs, so the agent picks and books without asking.
+        example(
+            "Book a 5 night trip to Paris from 2026-11-12 to 2026-11-17 for 2 travelers, flying out of SFO. High "
+            "budget. Lead traveler: Katherine Johnson.",
+            category="book_request",
+            split="core",
+            criteria="Confirms a round-trip flight and a hotel were booked for 2026-11-12 to 2026-11-17 and lists "
+            "the confirmation codes, without asking the user to choose or confirm first.",
+            required=["flight-booker", "hotel-booker"],
+            forbidden=["calendar-checker"],
+            parallel_search=True,
+            booking_allowed=True,
+        ),
         # Explicit bookings: the user has already chosen, so booking these exact IDs is correct.
         example(
             f"Please book flights {outbound} and {inbound} (SFO-CDG round trip, 2026-11-12 to 2026-11-16) and "
@@ -156,7 +169,6 @@ def build_examples() -> list[dict]:
             split="core",
             criteria="Confirms both flights and the hotel were booked and lists the confirmation codes.",
             required=["flight-booker", "hotel-booker"],
-            approval_policy="approve",
             expected_bookings={"book_flight": [outbound, inbound], "book_hotel": [hotel]},
         ),
         example(
@@ -167,17 +179,6 @@ def build_examples() -> list[dict]:
             criteria="Confirms the hotel booking with its confirmation code and does not book any flights.",
             required=["hotel-booker"],
             forbidden=["flight-booker"],
-            approval_policy="approve",
-            expected_bookings={"book_hotel": [hotel]},
-        ),
-        # Rejected booking: the agent must not retry and should ask how to proceed.
-        example(
-            f"Book hotel {hotel} in Paris from 2026-11-12 to 2026-11-16 for Ada Lovelace.",
-            category="booking_rejected",
-            split="edge",
-            criteria="Clearly states the booking was NOT made because it was declined, does not claim a "
-            "confirmation, and asks the user how they would like to proceed.",
-            required=["hotel-booker"],
             expected_bookings={"book_hotel": [hotel]},
         ),
         # Activities only: the user is already booked, so no flight or hotel work.

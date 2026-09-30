@@ -1,11 +1,8 @@
-import json
-
 from dotenv import load_dotenv
 from langchain_core.utils.uuid import uuid7
 from langgraph.checkpoint.memory import InMemorySaver
 
 from travel_planner.agent import build_agent
-from travel_planner.hitl import run_turn
 
 ITINERARY_PATH = "/itinerary.md"
 
@@ -24,26 +21,6 @@ def print_progress(chunk: dict) -> None:
                     print(f"  → {call['args'].get('subagent_type')}: {description}")
                 elif in_subagent:
                     print(f"      · {call['name']}")
-
-
-def ask_decision(action: dict, allowed: list[str]) -> dict:
-    print(f"\n  Approval needed: {action['name']}")
-    print("  " + json.dumps(action["args"], indent=2).replace("\n", "\n  "))
-    options = "/".join(f"[{d[0]}]{d[1:]}" for d in allowed)
-    while True:
-        choice = input(f"  {options}? ").strip().lower()[:1]
-        if choice == "a" and "approve" in allowed:
-            return {"type": "approve"}
-        if choice == "r" and "reject" in allowed:
-            reason = input("  Reason: ").strip() or "User declined."
-            return {"type": "reject", "message": f"Booking not made: {reason}"}
-        if choice == "e" and "edit" in allowed:
-            try:
-                args = json.loads(input("  New args as JSON: "))
-            except json.JSONDecodeError as e:
-                print(f"  Invalid JSON: {e}")
-                continue
-            return {"type": "edit", "edited_action": {"name": action["name"], "args": args}}
 
 
 def print_last_reply(agent, config) -> None:
@@ -80,7 +57,9 @@ def main():
             print_itinerary(agent, config)
             continue
 
-        run_turn(agent, {"messages": [{"role": "user", "content": user_input}]}, config, ask_decision, print_progress)
+        payload = {"messages": [{"role": "user", "content": user_input}]}
+        for chunk in agent.stream(payload, config=config, stream_mode="updates", subgraphs=True, version="v2"):
+            print_progress(chunk)
         print_last_reply(agent, config)
 
 

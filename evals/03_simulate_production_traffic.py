@@ -20,9 +20,7 @@ from langsmith import tracing_context
 from openevals.simulators import create_llm_simulated_user
 
 from travel_planner.agent import build_agent
-from travel_planner.evals.harness import approval_policy
 from travel_planner.evals.settings import PROD_PROJECT
-from travel_planner.hitl import run_turn
 from travel_planner.prompts import COORDINATOR_PROMPTS
 
 DONE = "DONE"
@@ -36,7 +34,6 @@ class Persona:
     name: str
     opening: str
     facts: str
-    approves_bookings: bool
 
 
 PERSONAS = [
@@ -44,40 +41,34 @@ PERSONAS = [
         "decisive-booker",
         "Plan a 4-day trip from SFO to Tokyo, 2026-11-10 to 2026-11-14, just me. Mid-range budget.",
         "You are Priya Shah. You love food and museums. You want to compare options before booking anything.",
-        approves_bookings=True,
     ),
     Persona(
         "vague-planner",
         "I want a getaway somewhere in Europe in November.",
         "You are Sam Lee flying from Chicago (ORD) with your partner, 2026-11-12 to 2026-11-16, about $3,000 total. "
         "You are open to Paris or Rome.",
-        approves_bookings=False,
     ),
     Persona(
         "budget-traveler",
         "Cheapest reasonable trip SEA to Paris, 2026-11-05 to 2026-11-09, one person.",
         "You are Jordan Kim. Your hotel budget is strictly under $200 per night. You only book after seeing prices.",
-        approves_bookings=True,
     ),
     Persona(
         "fixed-dates",
         "Book me a trip SFO to London 2026-12-07 to 2026-12-11.",
         "You are Alex Rivera. Your dates are fixed and you get annoyed if asked to confirm or change them. You "
         "prefer nonstop flights and a central hotel.",
-        approves_bookings=True,
     ),
     Persona(
         "changes-mind",
         "Find me flights and a hotel JFK to Rome, 2026-11-18 to 2026-11-23, 2 travelers.",
         "You are Morgan Diaz. Halfway through you decide you only want the hotel, not flights. You do not want "
         "anything booked that you didn't explicitly pick.",
-        approves_bookings=False,
     ),
     Persona(
         "activities-only",
         "I'm already staying in Shinjuku, Tokyo 2026-11-10 to 2026-11-13. What should I do each day?",
         "You are Casey Nguyen. You like food, nightlife, and shopping. You already have flights and a hotel.",
-        approves_bookings=False,
     ),
 ]
 
@@ -88,7 +79,6 @@ def simulate(agent, persona: Persona, user_model, max_turns: int) -> str:
     user = create_llm_simulated_user(
         system=f"{persona.facts}\n\n{USER_RULES}", client=user_model, fixed_responses=[persona.opening]
     )
-    decide = approval_policy("approve" if persona.approves_bookings else "reject")
 
     transcript: list[Any] = []
     for turn in range(max_turns):
@@ -97,7 +87,7 @@ def simulate(agent, persona: Persona, user_model, max_turns: int) -> str:
         if message["content"].strip() == DONE:
             break
         transcript.append(message)
-        run_turn(agent, {"messages": [{"role": "user", "content": message["content"]}]}, config, decide)
+        agent.invoke({"messages": [{"role": "user", "content": message["content"]}]}, config)
         transcript.append({"role": "assistant", "content": agent.get_state(config).values["messages"][-1].text})
     return f"{persona.name}: {len(transcript) // 2} turns (thread {thread_id})"
 

@@ -10,16 +10,15 @@ A travel planning agent built on [Deep Agents](https://docs.langchain.com/oss/py
           ▼              ▼               ▼                  ▼
   calendar-checker  flight-booker   hotel-booker     activity-planner
   get_calendar_     search_flights  search_hotels    search_activities
-  events            book_flight*    book_hotel*      get_weather_forecast
+  events            book_flight     book_hotel       get_weather_forecast
   find_free_windows
-                                          * requires human approval
 ```
 
 | Subagent | Tools | Module |
 |---|---|---|
 | `calendar-checker` | `get_calendar_events`, `find_free_windows` | `travel_planner/tools/calendar.py` |
-| `flight-booker` | `search_flights`, `book_flight` (HITL) | `travel_planner/tools/flights.py` |
-| `hotel-booker` | `search_hotels`, `book_hotel` (HITL) | `travel_planner/tools/hotels.py` |
+| `flight-booker` | `search_flights`, `book_flight` | `travel_planner/tools/flights.py` |
+| `hotel-booker` | `search_hotels`, `book_hotel` | `travel_planner/tools/hotels.py` |
 | `activity-planner` | `search_activities`, `get_weather_forecast` | `travel_planner/tools/activities.py` |
 
 ## Setup
@@ -45,7 +44,7 @@ You: Plan a 4-day trip from SFO to Tokyo, Oct 20-24, mid-range budget, I like fo
   → hotel-booker: Search for hotels ...
 ```
 
-When a booking is proposed, the CLI pauses and asks you to `[a]pprove`, `[e]dit` (new args as JSON), or `[r]eject` (with a reason). Type `/itinerary` to print the generated itinerary and `/quit` to exit.
+Bookings are mock and go through as soon as you pick an option, with no approval step. Type `/itinerary` to print the generated itinerary and `/quit` to exit.
 
 LangGraph Studio:
 
@@ -81,4 +80,4 @@ Eval code lives in `travel_planner/evals/`: the harness, the offline and online 
 
 ## Mock data → real APIs
 
-`travel_planner/mock_data.py` seeds its generators from the tool arguments, so the same query always returns the same results for any city or date. To go live, replace a tool's body in `travel_planner/tools/` with a real API call and keep the tool's name, signature, and ID prefixes (`FL-`, `HT-`). The subagent prompts and the approval config in `travel_planner/subagents.py` can stay as they are.
+`travel_planner/mock_data.py` seeds its generators from the tool arguments, so the same query always returns the same results for any city or date. To go live, replace a tool's body in `travel_planner/tools/` with a real API call and keep the tool's name, signature, and ID prefixes (`FL-`, `HT-`). The subagent prompts in `travel_planner/subagents.py` can stay as they are. Real bookings should get a human approval step first: add `interrupt_on` for `book_flight` and `book_hotel` to those subagents.
