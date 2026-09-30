@@ -1,11 +1,8 @@
-"""Reset: delete everything the lifecycle demo created in LangSmith so the runbook can start from a clean slate.
+"""Reset: delete everything the demo created in LangSmith so the runbook can start from a clean slate.
 
-Removes the golden dataset and its experiments, the online evaluators and automation rules on the prod project
-(including LLM judges added in the UI), the prod project and its traces, and the annotation queue.
-`--include-dev-project` also deletes the dev tracing project used by `main.py` and `langgraph dev`.
-
-Feedback configs (`plan_quality`, `booking_safety`, `correction`) are workspace-wide and are kept; stage 4
-reuses them.
+Removes the golden and trajectory datasets with their experiments and bound evaluators, the online evaluators and
+automation rules on the prod project (including those added in the UI), the prod project and its traces, and the
+annotation queue. `--include-dev-project` also deletes the dev tracing project used by `main.py` and `langgraph dev`.
 """
 
 import argparse
@@ -15,11 +12,11 @@ import os
 from dotenv import load_dotenv
 from langsmith import Client
 
-from travel_planner.evals.settings import DATASET_NAME, PROD_PROJECT, QUEUE_NAME
+from travel_planner.evals.settings import DATASET_NAME, PROD_PROJECT, QUEUE_NAME, TRAJECTORY_DATASET_NAME
 
 
-def project_rules(client: Client, project_id: str) -> list[dict]:
-    return client.request_with_retries("GET", "/runs/rules", params={"session_id": project_id}).json()
+def rules_for(client: Client, **params: str) -> list[dict]:
+    return client.request_with_retries("GET", "/runs/rules", params=params).json()
 
 
 def delete_rules(client: Client, rules: list[dict]) -> None:
@@ -43,17 +40,22 @@ def main():
     load_dotenv(override=True)
     client = Client()
 
-    dataset = client.read_dataset(dataset_name=DATASET_NAME) if client.has_dataset(dataset_name=DATASET_NAME) else None
-    experiments = list(client.list_projects(reference_dataset_id=dataset.id)) if dataset else []
+    datasets = [
+        client.read_dataset(dataset_name=name)
+        for name in (DATASET_NAME, TRAJECTORY_DATASET_NAME)
+        if client.has_dataset(dataset_name=name)
+    ]
+    experiments = [e for d in datasets for e in client.list_projects(reference_dataset_id=d.id)]
     prod = next(iter(client.list_projects(name=PROD_PROJECT)), None)
-    rules = project_rules(client, str(prod.id)) if prod else []
+    rules = [r for d in datasets for r in rules_for(client, dataset_id=str(d.id))]
+    rules += rules_for(client, session_id=str(prod.id)) if prod else []
     queue = next(iter(client.list_annotation_queues(name=QUEUE_NAME)), None)
     dev_name = os.environ.get("LANGSMITH_PROJECT", "deepagent-travel-planner")
     dev = next(iter(client.list_projects(name=dev_name)), None) if args.include_dev_project else None
 
     plan = [
         *(f"experiment   {e.name}" for e in experiments),
-        *([f"dataset      {DATASET_NAME}"] if dataset else []),
+        *(f"dataset      {d.name}" for d in datasets),
         *(f"rule         {r['display_name']}" for r in rules),
         *([f"project      {PROD_PROJECT} (and its traces)"] if prod else []),
         *([f"queue        {QUEUE_NAME}"] if queue else []),
@@ -70,9 +72,9 @@ def main():
 
     for experiment in experiments:
         client.delete_project(project_id=str(experiment.id))
-    if dataset:
-        client.delete_dataset(dataset_id=dataset.id)
     delete_rules(client, rules)
+    for dataset in datasets:
+        client.delete_dataset(dataset_id=dataset.id)
     if prod:
         client.delete_project(project_id=str(prod.id))
     if queue:
