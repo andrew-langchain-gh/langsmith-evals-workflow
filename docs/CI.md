@@ -30,6 +30,29 @@ Dataset edits change the benchmark; keep it fixed while comparing PRs.
 
 ## Rehearse the presentation
 
+### Run CI without changing application code
+
+Create a branch with an empty commit, push it, and open a PR against `main`:
+
+```sh
+git switch -c demo/ci-evaluation
+git commit --allow-empty -m "Trigger CI evaluation demo"
+git push -u origin demo/ci-evaluation
+```
+
+[Open the PR on GitHub](https://github.com/andrew-langchain-gh/langsmith-evals-workflow/compare/main...demo/ci-evaluation).
+The `pull_request` trigger runs the golden assertion experiment even though no
+application files changed. Show the **Golden assertions** job, the PR report,
+and its **Open LangSmith experiment** link. The outcome reflects the current
+agent's scores; an empty PR does not guarantee a passing check. Use a fresh branch
+name if `demo/ci-evaluation` already exists.
+
+Alternatively, use **Actions → Golden assertion evaluation → Run workflow** to
+run without a PR. Manual runs publish a job summary and downloadable report;
+they do not post a PR comment. Configure the repository secrets first, as described above.
+
+### Demonstrate a failing gate
+
 1. Establish a passing baseline with a manual run.
 2. Open a PR whose coordinator prompt omits confirmation codes from the final answer.
 3. Show **Golden assertions** failing and the PR comment identifying

@@ -190,6 +190,28 @@ Show a failing confirmation-code assertion, inspect the experiment and review qu
 then fix the prompt and show the passing required check. Reports are published even
 when evaluation fails.
 
+### Run CI without changing application code
+
+Create a branch with an empty commit, push it, and open a PR against `main`:
+
+```sh
+git switch -c demo/ci-evaluation
+git commit --allow-empty -m "Trigger CI evaluation demo"
+git push -u origin demo/ci-evaluation
+```
+
+[Open the PR on GitHub](https://github.com/andrew-langchain-gh/langsmith-evals-workflow/compare/main...demo/ci-evaluation).
+The `pull_request` trigger runs the golden assertion experiment even though no
+application files changed. Show the **Golden assertions** job, the PR report,
+and its **Open LangSmith experiment** link. The outcome reflects the current
+agent's scores; an empty PR does not guarantee a passing check. Use a fresh branch
+name if `demo/ci-evaluation` already exists.
+
+Alternatively, use **Actions → Golden assertion evaluation → Run workflow** to
+run without a PR. Manual runs publish a job summary and downloadable report;
+they do not post a PR comment. Configure the repository secrets first, as described
+in [CI.md](CI.md).
+
 ## Recap
 
 | Tool | Use it when | In this demo |
