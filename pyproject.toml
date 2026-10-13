@@ -1,5 +1,5 @@
 [project]
-name = "deepagent-travel-planner"
+name = "langsmith-evals-workflow"
 version = "0.1.0"
 description = "Deep Agents travel planner that delegates to flight, hotel, calendar, and activity subagents"
 readme = "README.md"
@@ -13,6 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "agentevals==0.0.9",
     "langgraph-cli[inmem]>=0.4.32",
     "pytest>=9.1.1",
 ]

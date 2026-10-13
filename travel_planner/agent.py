@@ -28,5 +28,5 @@ def build_agent(checkpointer: Checkpointer = None):
 
 
 def make_graph(config: RunnableConfig):
-    """Graph factory for `langgraph dev`; the server supplies its own checkpointer."""
+    """Graph factory for local and hosted Agent Server; the server manages persistence."""
     return build_agent()

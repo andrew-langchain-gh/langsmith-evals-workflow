@@ -1,0 +1,19 @@
+{
+  "source_run_id": "01a112e9-4de2-7cc0-8d0f-d2099893b94f",
+  "source_example_id": "f3c4d222-af5c-409e-a649-a45aa529f1d4",
+  "description": "Coordinator call batches projected from the UI-saved Tokyo reference; only compared argument fields retained.",
+  "messages": [
+    {"type": "ai", "content": "", "tool_calls": [
+      {"id": "search-flight", "name": "task", "args": {"subagent_type": "flight-booker"}},
+      {"id": "search-hotel", "name": "task", "args": {"subagent_type": "hotel-booker"}}
+    ]},
+    {"type": "ai", "content": "", "tool_calls": [
+      {"id": "book-flight", "name": "task", "args": {"subagent_type": "flight-booker"}},
+      {"id": "book-hotel", "name": "task", "args": {"subagent_type": "hotel-booker"}},
+      {"id": "activities", "name": "task", "args": {"subagent_type": "activity-planner"}}
+    ]},
+    {"type": "ai", "content": "", "tool_calls": [
+      {"id": "itinerary", "name": "write_file", "args": {"file_path": "/itinerary.md"}}
+    ]}
+  ]
+}

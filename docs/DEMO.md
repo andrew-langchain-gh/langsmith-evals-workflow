@@ -1,24 +1,31 @@
 # Demo Runbook: Evaluating an Agent with LangSmith
 
-A walkthrough in four steps that uses the travel planner deep agent to show a golden dataset, an offline LLM-as-judge evaluator, online evaluators on production traffic, and a trajectory evaluator on a dataset built from real traces. Most of the work happens in the LangSmith UI. The scripts only create data and run the agent.
+A walkthrough in five steps using the travel planner deep agent: create a golden dataset, score offline assertions, deploy and evaluate live traffic, import reviewed traces, and compare coordinator trajectories. The UI supports inspection, online evaluator configuration, and human review. The scripts create datasets/examples and run offline SDK evaluators.
+
+The [Jupyter notebook](../notebooks/agent_evaluations.ipynb) presents the same five
+steps with direct SDK code and explanatory markdown. It includes all five golden
+examples and 18 traffic requests, with resource IDs configured in one cell. Run it
+section by section; skip trace import when reusing the existing reference dataset.
 
 ```
- 1. golden dataset ──► 2. offline experiment ──► 3. deploy + online evals ──► 4. trace → queue → dataset
-   (hand-curated)       (correctness judge)        (toxicity on live traffic)     (trajectory evaluator)
+ 1. golden dataset → 2. offline assertions → 3. deploy + online evals
+                                                    ↓
+ 5. trajectory experiment ← 4. review + SDK trace import
 ```
 
 ## Pre-demo checklist
 
 ```sh
-uv sync && cp .env.example .env              # ANTHROPIC_API_KEY + LangSmith keys
-uv run pytest                                # tool unit tests, no LLM calls
-uv run evals/00_reset_demo.py                # optional: wipe a previous run (asks to confirm)
+uv sync
+# First-time setup only: copy .env.example to .env and configure credentials.
+uv run pytest                                # tools, deployment client, trajectory matching
+uv run evals/00_reset_demo.py                # optional: reset configured resources (see appendix)
 uv run evals/01_create_golden_dataset.py
 ```
 
 - **Dates:** the examples in `evals/01_create_golden_dataset.py` and `evals/03_generate_traffic.py` name dates without a year (October–December). If the demo happens after those dates, move them forward.
 - **Workspace secret:** the UI evaluators need a model key. Go to Settings → Secrets and add `ANTHROPIC_API_KEY` (or the key for your judge model's provider).
-- **Rehearse step 4 in advance:** online evaluators and automation rules take a few minutes to fire. Run `03` well before going on stage so the queue already has items.
+- **Rehearse steps 4–5 in advance:** configure the online evaluator and queue automation before running `03`, then allow feedback and queue items to appear. Create an empty trajectory dataset in the UI and copy its ID for `04` and `05`. The current dataset is `24c80282-0e05-4b07-9a7d-e06c4d7250b8`; its 18 SDK-imported examples were format-checked, and step 5 was run successfully. Reuse it for rehearsal without importing the same traces again.
 
 ---
 
@@ -30,11 +37,13 @@ uv run evals/01_create_golden_dataset.py
 - "There are many ways to get started evaluating an agent by building a golden dataset: collecting agent traces, building a human-curated dataset by hand, or synthetically generating data with the help of an LLM. For this demonstration we will curate a dataset by hand."
 - Each example is a `question` and the `answer` a travel expert expects, in the same shape as the [chatbot tutorial](https://docs.langchain.com/langsmith/evaluate-chatbot-tutorial).
 - The answers are **key facts**, not a word-for-word reply: what was booked, for whom, when, and where. A good agent can write a different itinerary and still be correct.
-- One example says "don't book anything yet". Sometimes the correct answer is to **not act**.
+- All five examples are booking requests with named assertions for the expected trip details, hotel, activities, confirmation codes, and total cost.
 
-## Step 2: A correctness evaluator, then an experiment (`evals/02_run_experiment.py`)
+## Step 2: SDK assertion evaluation and an experiment (`evals/02_run_experiment.py`)
 
-**Build the evaluator in the UI:** open `travel-planner-golden` → **Evaluators** → **+ Evaluator** → **Create from a template** → **Correctness**.
+**Primary evaluator:** `02` defines `grade_assertions()` and passes it directly to `Client.evaluate()`. It produces one LLM-as-judge score per named assertion; no UI evaluator setup is required.
+
+**Optional additional evaluator in the UI:** open `travel-planner-golden` → **Evaluators** → **+ Evaluator** → **Create from a template** → **Correctness**.
 - Map the variables:
   - input → `inputs.question`
   - output → `outputs.answer`
@@ -48,31 +57,75 @@ uv run evals/01_create_golden_dataset.py
 uv run evals/02_run_experiment.py
 ```
 
-**Show:** The script contains no evaluator code at all. The experiment's `correctness` column is filled in by the evaluator you just bound to the dataset. Open a row and compare the agent's answer with the reference and the judge's reasoning.
+**Compare agent models:** run these commands from the project root. Both use the same Anthropic judge and run each example three times within one experiment. Each command creates a separate experiment to compare in LangSmith.
+
+Anthropic agent:
+
+```sh
+TRAVEL_PLANNER_MODEL=anthropic:claude-haiku-4-5-20251001 \
+uv run evals/02_run_experiment.py \
+  --judge-model anthropic:claude-sonnet-4-5-20250929 \
+  --num-repetitions 3
+```
+
+OpenAI agent:
+
+```sh
+TRAVEL_PLANNER_MODEL=openai:gpt-4.1 \
+uv run --with langchain-openai evals/02_run_experiment.py \
+  --judge-model anthropic:claude-sonnet-4-5-20250929 \
+  --num-repetitions 3
+```
+
+`--with langchain-openai` supplies the OpenAI integration for that run; it is not currently a project dependency. Both commands need LangSmith and Anthropic credentials available locally, and the OpenAI command also needs `OPENAI_API_KEY`. Workspace secrets used by UI evaluators do not configure the local SDK judge.
+
+If `.env` defines `TRAVEL_PLANNER_MODEL`, remove that entry before running these commands: the script loads `.env` with `override=True`, which would override the model selected on the command line.
+
+**Show:** The script passes `evaluators=[grade_assertions]` to `Client.evaluate()`. Show the evaluator in the same file: each assertion becomes a feedback score. The optional UI-bound correctness judge also adds a `correctness` column. Open a row and compare the scores and judge reasoning.
 
 **Talk track:**
-- An evaluator bound to a dataset runs automatically on **every** experiment against that dataset. Subject-matter experts can own the rubric in the UI while engineers own the code.
+- The SDK evaluator is supplied explicitly on each experiment. Optional evaluators bound to the dataset also run automatically, so subject-matter experts can manage an additional rubric in the UI.
 - Correctness is **reference-based**: it needs the expected answer. Keep that in mind for step 3.
 
 ## Step 3: Deploy and watch (`evals/03_generate_traffic.py`)
 
 **Talk track:** "Once you have a baseline of dataset examples and evaluators, it is time to deploy the agent and watch its behavior."
 
+**Deploy first:** follow [DEPLOYMENT.md](DEPLOYMENT.md), using deployment name `deepagent-travel-planner-prod-20261007`. Copy the deployment's API URL once it is ready. Open its linked tracing project or agent environment; Cloud controls the hosted tracing destination.
+
+Run the LangGraph CLI from the project root:
+
 ```sh
-uv run evals/03_generate_traffic.py
+uv run langgraph deploy --remote --name deepagent-travel-planner-prod-20261007
 ```
 
-**Show:** The `deepagent-travel-planner-prod` project. About 18 traces of one-shot requests: ordinary bookings, a few rude users, and a few requests the agent can't fully satisfy, such as a Paris hotel under $50 or a return date before the departure date. Point out that the project has **no online evaluators yet**.
+`--remote` builds in the cloud without requiring local Docker. The command uses `langgraph.json` and deployment credentials from `.env`; non-reserved variables in that file become hosted secrets. The installed CLI (`0.4.32`) defaults to legacy deployment type `dev`. If your workspace rejects that type, use the LangSmith UI's **Serverless** option or update to a CLI version supporting the current deployment types.
+
+After the deployment is ready, send a smoke-test request using its API URL:
+
+```sh
+uv run evals/03_generate_traffic.py --url https://deepagent-travel-planner-pr-76c99bb254005eb2a4706a3d2dc1f40e.us.langgraph.app --n 1 --concurrency 1
+```
+
+**Show:** The deployment's tracing destination and the smoke-test request. For a fresh deployment, show the smoke trace before adding the online evaluator. Without `--url`, the script runs the agent locally and only simulates production tracing.
 
 **Add online evaluators:** project → **Evaluators** → **+ Evaluator** → **Create from a template** → **Safety** → **Toxicity**.
 - Filter: root runs. Sampling: 100% for the demo; say 10–20% in production.
-- Map the text variable to the run **input** (the user's message). Here we're flagging abusive users; the agent's replies stay polite.
+- Map the text variable to the user's message in `inputs.messages`. Here we're flagging abusive users; the agent's replies stay polite. Preview the mapping on the smoke-test trace.
+
+**Generate traffic after saving the evaluator:**
+
+```sh
+uv run evals/03_generate_traffic.py --url https://deepagent-travel-planner-pr-76c99bb254005eb2a4706a3d2dc1f40e.us.langgraph.app --n 18 --concurrency 5
+```
+
+Show ordinary bookings, rude users, and requests the agent cannot fully satisfy, such as a Paris hotel under $50 or a return date before departure. Hosted outputs use `outputs.messages`; the `outputs.answer` wrapper belongs to the offline runner.
 
 **Talk track:**
 - Production traffic has **no reference answers**, so correctness can't run here. Online evaluators must be **reference-free**: toxicity, safety, format, and policy checks.
 - Online metrics tell you **that** something is happening in production. Step 4 turns those traces into something you can test against.
 
-## Step 4: From a trace to a trajectory evaluator
+## Step 4: Import a reviewed trace
 
 **1. Create an annotation queue:** Annotation queues → **+ New queue** → `travel-planner-review`.
 
@@ -81,34 +134,75 @@ uv run evals/03_generate_traffic.py
 - Action: **Add to annotation queue** → `travel-planner-review`.
 - Talk track: rules run on new traces, and you can apply them to past traces when you create the rule.
 
-**3. Review one item in the queue.** Open the trace and point out the **trajectory**: the coordinator's `task` tool calls to `flight-booker`, `hotel-booker`, and `activity-planner`, and the results each one returned (flight IDs, hotel IDs, confirmation codes). Click **Add to dataset** → **+ New dataset** → `travel-planner-trajectories`. The example's reference output is the run's `messages`, which is the trajectory a reviewer just approved.
-
-**4. Bind a trajectory evaluator:** `travel-planner-trajectories` → **Evaluators** → **+ Evaluator** → **Create from a template** → **Trajectory**.
-- Map the output messages to `outputs.messages` and the reference to `reference_outputs.messages`.
-
-**5. Run the experiment against the new dataset:**
+**3. Review one item in the queue.** Open the root coordinator trace and inspect the `task` calls and specialist summaries. Copy the root run ID, then import it through the SDK:
 
 ```sh
-uv run evals/02_run_experiment.py --dataset travel-planner-trajectories
+uv run evals/04_import_trajectory_example.py \
+  --run-id 01a117a2-46e8-7861-8705-70b44fead800 \
+  --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
 ```
 
+The importer saves `run.inputs` as replay inputs and `run.outputs` as reference outputs, with `source_run_id` linking the example to its reviewed run. Each invocation creates an example. Review in the UI, then import through `04`; the UI conversation import previously placed the full history in inputs and left outputs empty. The current dataset has been corrected.
+
+To import all completed, successful root traces from the project:
+
+```sh
+uv run evals/04_import_trajectory_example.py \
+  --project-id 936b8cd7-79d4-4eaf-9e29-34a9aea7a260 \
+  --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
+```
+
+Project import includes traces with no coordinator calls and creates new examples
+each time it runs. It skips failed and unfinished traces. Review the project
+before importing all of its traces as references.
+
+## Step 5: Evaluate coordinator trajectories
+
+**1. Explain the coordinator matching policy:**
+
+The SDK evaluator projects assistant messages containing `task` or `write_file` calls. It omits planning tools, prose, and tool results. `task` matches on `subagent_type`; `write_file` matches on `file_path`. Strict matching preserves batch order and membership while allowing calls inside a batch to reorder. Unordered matching checks the same call inventory across all batches.
+
+The new Tokyo reference's batches: flight + hotel delegation → flight + hotel delegation → activities → write `/itinerary.md`. The first batch requests searches and the second requests bookings, but the matcher does not grade task descriptions or prove search-before-booking. Detailed specialist tools and booking correctness are outside this stage.
+
+**2. Run the experiment against the reference dataset:**
+
+```sh
+uv run evals/05_run_trajectory_experiment.py \
+  --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
+```
+
+The runner passes its evaluators explicitly to `Client.evaluate()`; no UI evaluator binding is required. It uses dataset examples directly, expecting original user messages in inputs and reference messages in outputs. Use `--dataset <dataset-id>` for another reviewed dataset. `--num-repetitions` defaults to 1.
+
+**3. Inspect the recorded results:** Show `trajectory_strict_match` and `trajectory_unordered_match`, then open a row and compare actual delegation batches with the reference. The target runs the agent locally; it does not call the deployed endpoint. Both scores use coordinator messages, so specialist search/booking execution remains outside this evaluation.
+
+Four current references contain no tool calls: matching checks that a new run also has no relevant calls, not whether its clarification text is correct. Dana's Paris reference omits `write_file`; retain it only if that is an accepted reference behavior.
+
 **Talk track:**
-- Final-answer evaluators check **what** the agent said. Trajectory evaluators check **how** it got there: which subagents it delegated to, in what order, and with which IDs. A reply can look correct even when the agent booked the wrong thing or skipped a step.
-- The reference trajectory came from production and a human approved it. The loop is closed: **traffic → review → dataset → experiment**.
+- Final-answer evaluators check **what** the agent said. This coordinator evaluator checks which specialists it delegated to, the delegation batches, and the itinerary path. It does not grade IDs, instructions, or specialist execution.
+- A reviewed reference trajectory comes from production; project-wide imports are candidates until reviewed. The loop is closed: **traffic → review → dataset → experiment**.
+
+## Step 6: Gate a GitHub PR
+
+Follow [CI.md](CI.md) to run the same golden assertions on proposed changes.
+Show a failing confirmation-code assertion, inspect the experiment and review queue,
+then fix the prompt and show the passing required check. Reports are published even
+when evaluation fails.
 
 ## Recap
 
 | Tool | Use it when | In this demo |
 |---|---|---|
 | **Golden dataset** | You can say what "correct" looks like | 5 hand-written questions and answers |
-| **Offline evaluator** | Comparing versions before shipping, with a reference | Correctness judge bound to the dataset |
+| **Offline evaluator** | Comparing versions before shipping, with a reference | SDK judge scores each named assertion; optional UI correctness judge |
 | **Online evaluator** | After shipping, on real traffic without references | Toxicity on the prod project |
 | **Automation rule** | An online signal should trigger an action | Flagged runs → annotation queue |
-| **Annotation queue** | A human needs to judge or curate | Review a trace and add it to a dataset |
+| **Annotation queue** | A human needs to judge or curate | Review a trace, then import raw root inputs/outputs with `04` |
 | **Trajectory evaluator** | *How* the agent acts matters, not just the answer | Compare the path against a reviewed trace |
 
 ---
 
 ## Appendix: Resetting between rehearsals
 
-`uv run evals/00_reset_demo.py` deletes everything the demo created in LangSmith: both datasets, their experiments and bound evaluators, the prod project with its online evaluators and rules, and the queue. Then start again from step 1.
+`uv run evals/00_reset_demo.py` deletes the two datasets named in `travel_planner/evals/settings.py`, their experiments/evaluator rules, the queue, and the project named `deepagent-travel-planner-prod` if it exists. It does not delete deployments or automatically find the replacement deployment's linked tracing project or the project passed to `04 --project-id`.
+
+The reset script still needs configurable project IDs to fully reset this hosted workflow. After recreating the trajectory dataset, pass its new ID to both `04` and `05`; `05`'s current default points to the existing dataset.

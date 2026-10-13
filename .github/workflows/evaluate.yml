@@ -1,0 +1,91 @@
+name: Golden assertion evaluation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: golden-evals-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    name: Golden assertions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+      - uses: socketdev/action@ba6de6cc0565af1f42295590380973573297e31f
+        with:
+          mode: firewall-free
+      - name: Install dependencies
+        run: uv sync --locked --python 3.13
+      - name: Run unit tests
+        env:
+          LANGSMITH_TRACING: "false"
+        run: uv run --no-sync python -m pytest -q
+      - name: Run golden assertion gate
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_WORKSPACE_ID: ${{ vars.LANGSMITH_WORKSPACE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LANGSMITH_TRACING: "true"
+          TRAVEL_PLANNER_MODEL: anthropic:claude-haiku-4-5-20251001
+          EVAL_DATASET_NAME: ${{ vars.EVAL_DATASET_NAME || 'travel-planner-golden' }}
+          EVAL_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVAL_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          test -n "$LANGSMITH_API_KEY" || { echo "Configure LANGSMITH_API_KEY in repository secrets"; exit 1; }
+          test -n "$ANTHROPIC_API_KEY" || { echo "Configure ANTHROPIC_API_KEY in repository secrets"; exit 1; }
+          uv run --no-sync python evals/02_run_experiment.py --ci --dataset "$EVAL_DATASET_NAME" --annotation-queue travel-planner-review
+      - name: Publish job summary
+        if: always()
+        run: |
+          if [ -f eval-results/report.md ]; then
+            cat eval-results/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            mkdir -p eval-results
+            printf '## Golden assertion evaluation\n\n**FAILED** — evaluation did not produce a report. See job logs.\n' > eval-results/report.md
+            cat eval-results/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-eval-report
+          path: eval-results/
+
+  report:
+    name: Evaluation report
+    needs: evaluate
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: golden-eval-report
+          path: eval-results
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- golden-assertion-evaluation -->';
+            const body = marker + '\n' + fs.readFileSync('eval-results/report.md', 'utf8');
+            const params = {owner: context.repo.owner, repo: context.repo.repo};
+            const comments = await github.paginate(github.rest.issues.listComments, {...params, issue_number: context.issue.number});
+            const existing = comments.find(c => c.user.type === 'Bot' && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({...params, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({...params, issue_number: context.issue.number, body});
+            }
