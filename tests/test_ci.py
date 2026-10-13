@@ -65,3 +65,16 @@ def test_optional_feedback_does_not_change_gate(tmp_path):
     result = row()
     result["evaluation_results"]["results"].append(NS(key="correctness", score=0, comment="optional"))
     assert report(tmp_path, [result])["passed"]
+
+
+def test_long_error_is_shortened_in_markdown_but_preserved_in_json(tmp_path):
+    import json
+    error = "Model error: " + "x" * 70000
+    result = report(tmp_path, [row(error=error)])
+    assert not result["passed"]
+    markdown = (tmp_path / "report.md").read_text()
+    assert len(markdown) < 4000
+    assert "Open LangSmith experiment" in markdown
+    assert "full details in report.json" in markdown
+    stored = json.loads((tmp_path / "report.json").read_text())
+    assert stored["checks"][0]["comment"] == error
