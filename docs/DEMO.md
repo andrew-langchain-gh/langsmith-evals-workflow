@@ -25,7 +25,7 @@ uv run evals/01_create_golden_dataset.py
 
 - **Dates:** the examples in `evals/01_create_golden_dataset.py` and `evals/03_generate_traffic.py` name dates without a year (October–December). If the demo happens after those dates, move them forward.
 - **Workspace secret:** the UI evaluators need a model key. Go to Settings → Secrets and add `ANTHROPIC_API_KEY` (or the key for your judge model's provider).
-- **Rehearse steps 4–5 in advance:** configure the online evaluator and queue automation before running `03`, then allow feedback and queue items to appear. Create an empty trajectory dataset in the UI and copy its ID for `04` and `05`. The current dataset is `24c80282-0e05-4b07-9a7d-e06c4d7250b8`; its 18 SDK-imported examples were format-checked, and step 5 was run successfully. Reuse it for rehearsal without importing the same traces again.
+- **Rehearse steps 4–5 in advance:** configure the online evaluator and queue automation before running `03`, then allow feedback and queue items to appear. Create an empty trajectory dataset in the UI and copy its ID for `04` and `05`. The current trajectory dataset is `503aa3e3-c21c-4562-bb6c-bccb5f33d3ee`. Use this ID for both `04` and `05`; avoid importing the same traces repeatedly.
 
 ---
 
@@ -139,19 +139,19 @@ Show ordinary bookings, rude users, and requests the agent cannot fully satisfy,
 ```sh
 uv run evals/04_import_trajectory_example.py \
   --run-id 01a117a2-46e8-7861-8705-70b44fead800 \
-  --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
+  --dataset 503aa3e3-c21c-4562-bb6c-bccb5f33d3ee
 ```
 
 The importer saves `run.inputs` as replay inputs and `run.outputs` as reference outputs, with `source_run_id` linking the example to its reviewed run. Each invocation creates an example. Review in the UI, then import through `04`; the UI conversation import previously placed the full history in inputs and left outputs empty. The current dataset has been corrected.
 
-The single-run example above is the previously reviewed Tokyo booking trace. For a new trace, replace `--run-id` after reviewing it. The existing trajectory dataset is reused; redeploying does not create a new dataset.
+The single-run example above is the previously reviewed Tokyo booking trace. For a new trace, replace `--run-id` after reviewing it. Use the new trajectory dataset specified below for both import and evaluation.
 
 To import all completed, successful root traces from the new `langsmith-evals-workflow-production` project:
 
 ```sh
 uv run evals/04_import_trajectory_example.py \
   --project-id 01a136da-a562-7b6c-9640-37a603fc6c0c \
-  --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
+  --dataset 503aa3e3-c21c-4562-bb6c-bccb5f33d3ee
 ```
 
 Project import includes traces with no coordinator calls and creates new examples
@@ -170,7 +170,7 @@ The new Tokyo reference's batches: flight + hotel delegation → flight + hotel 
 
 ```sh
 uv run evals/05_run_trajectory_experiment.py \
-  --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
+  --dataset 503aa3e3-c21c-4562-bb6c-bccb5f33d3ee
 ```
 
 The runner passes its evaluators explicitly to `Client.evaluate()`; no UI evaluator binding is required. It uses dataset examples directly, expecting original user messages in inputs and reference messages in outputs. Use `--dataset <dataset-id>` for another reviewed dataset. `--num-repetitions` defaults to 1.
