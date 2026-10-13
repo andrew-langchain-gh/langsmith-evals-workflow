@@ -16,3 +16,5 @@ build
 dist
 *.egg-info
 .DS_Store
+.idea
+eval-results

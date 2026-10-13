@@ -106,7 +106,7 @@ def main():
             return run_deployed(client, request)
 
     else:
-        os.environ["LANGSMITH_PROJECT"] = PROD_PROJECT
+        project_name = os.environ.setdefault("LANGSMITH_PROJECT", PROD_PROJECT)
         os.environ["LANGSMITH_TRACING"] = "true"
         agent = build_agent(checkpointer=InMemorySaver())
 
@@ -119,7 +119,7 @@ def main():
     if args.url:
         print("\nRequests completed on Agent Server. Open the deployment's tracing project to review them.")
     else:
-        print(f"\nLocal rehearsal traces are in the {PROD_PROJECT!r} project.")
+        print(f"\nLocal rehearsal traces are in the {project_name!r} project.")
 
 
 if __name__ == "__main__":

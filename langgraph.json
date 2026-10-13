@@ -1,9 +1,11 @@
 {
   "$schema": "https://langgra.ph/schema.json",
-  "dependencies": ["."],
+  "dependencies": [
+    "."
+  ],
   "python_version": "3.13",
   "graphs": {
     "travel_planner": "./travel_planner/agent.py:make_graph"
   },
-  "env": ".env"
+  "env": "./.env"
 }

@@ -60,7 +60,7 @@ and traffic sent to the actual deployed endpoint.
 Deploy from the project root with the LangGraph CLI:
 
 ```sh
-uv run langgraph deploy --remote --name deepagent-travel-planner-prod-20261007
+uv run langgraph deploy --remote --name langsmith-evals-workflow
 ```
 
 `--remote` builds in the cloud, so local Docker is not required. The command uses
@@ -75,7 +75,7 @@ Send a smoke-test request to the deployed agent:
 
 ```sh
 uv run evals/03_generate_traffic.py \
-  --url https://deepagent-travel-planner-pr-76c99bb254005eb2a4706a3d2dc1f40e.us.langgraph.app \
+  --url https://langsmith-evals-workflow-1adb7e671f445cc1867199bd250fad01.us.langgraph.app \
   --n 1 --concurrency 1
 ```
 

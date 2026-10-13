@@ -28,7 +28,7 @@ For the default Anthropic agent:
 - Optional hosted model selection: `TRAVEL_PLANNER_MODEL`, defaulting to `anthropic:claude-haiku-4-5-20251001`.
 - Optional Anthropic gateway configuration: `ANTHROPIC_BASE_URL` and `ANTHROPIC_CUSTOM_HEADERS`, if your existing model setup uses them.
 
-Cloud manages its tracing credentials and tracing destination. Do not try to force the hosted tracing destination with `LANGSMITH_PROJECT`; it is reserved by the deploy CLI. The current deployment is named `deepagent-travel-planner-prod-20261007`. Use its linked tracing destination for hosted runs. The old deployment name returned an environment conflict after deletion, so the replacement uses a fresh name.
+Cloud manages its tracing credentials and tracing destination. Do not try to force the hosted tracing destination with `LANGSMITH_PROJECT`; it is reserved by the deploy CLI. The current deployment is named `langsmith-evals-workflow`; its managed tracing project is `langsmith-evals-workflow-production`.
 
 Model-provider secrets used by online evaluators must also be configured in LangSmith **Settings → Secrets**. Those workspace secrets are separate from the deployed agent's runtime credentials.
 
@@ -58,7 +58,7 @@ The locally installed CLI is **0.4.32**. It supports remote builds, but its depl
 For a workspace accepting this CLI's default deployment type, the command is:
 
 ```sh
-uv run langgraph deploy --remote --name deepagent-travel-planner-prod-20261007
+uv run langgraph deploy --remote --name langsmith-evals-workflow
 ```
 
 `--remote` uploads the application for a remote build; local Docker is not required for this route. If you choose a local build instead, Docker must be running, and Apple Silicon builds need support for the target `linux/amd64` platform.
@@ -94,23 +94,24 @@ The client reads local LangSmith credentials. Each request creates a persistent 
 
 The traffic client requires a local `LANGSMITH_API_KEY` (or `LANGGRAPH_API_KEY`, legacy `LANGCHAIN_API_KEY`, or the deployment CLI's `LANGGRAPH_HOST_API_KEY`) in the invoking environment or the project's `.env`. The script explicitly loads the project's file without overriding exported variables, so an empty `.env` placeholder cannot erase a valid shell credential. It passes the resolved credential to the SDK and fails before network calls if none is available for a hosted URL. A credential saved only in a CLI profile does not automatically authenticate the Python SDK. “Missing authentication headers” means the SDK did not send a credential; it is separate from a gateway timeout.
 
-Without `--url`, this script still supports local rehearsal: it invokes the agent in-process and traces to `deepagent-travel-planner-prod`. That mode does not exercise a deployment.
+Without `--url`, this script still supports local rehearsal: it invokes the agent in-process and respects `LANGSMITH_PROJECT` from `.env` (currently `langsmith-evals-workflow`). That mode does not exercise a deployment.
 
 Online scoring and automation rules can take time to appear. Verify root runs and subagent/tool spans in the linked tracing destination, then inspect evaluator feedback before rehearsing the annotation-queue workflow in `DEMO.md`.
 
 ## Deployment status
 
-Redeployed successfully on October 7, 2026, using the CLI remote-build route. The old deployment had been deleted; its name returned an environment conflict, so the replacement uses `deepagent-travel-planner-prod-20261007`. The deployment and mock-tool checks passed: 16 tests.
+Redeployed October 13, 2026 after the repository rename.
 
-- Deployment: `deepagent-travel-planner-prod-20261007`
-- Deployment ID: `cde3390e-2733-4ac0-a0c0-543f223c2eff`
-- API URL: https://deepagent-travel-planner-pr-76c99bb254005eb2a4706a3d2dc1f40e.us.langgraph.app
-- Tracing project ID: `01a11772-c38a-77ef-8759-cce245ca9077`
-- [Deployment dashboard](https://smith.langchain.com/o/ff74f6b5-f214-4385-bf4f-60fd0d94da58/host/deployments/cde3390e-2733-4ac0-a0c0-543f223c2eff)
+- Deployment: `langsmith-evals-workflow`
+- Deployment ID: `c8f61711-15de-4f08-b45d-205d43e7baa0`
+- API URL: https://langsmith-evals-workflow-1adb7e671f445cc1867199bd250fad01.us.langgraph.app
+- Hosted tracing project: `langsmith-evals-workflow-production`
+- Tracing project ID: `01a136da-a562-7b6c-9640-37a603fc6c0c`
+- [Deployment dashboard](https://smith.langchain.com/o/ff74f6b5-f214-4385-bf4f-60fd0d94da58/host/deployments/c8f61711-15de-4f08-b45d-205d43e7baa0)
 
-Deployment logs show successful model calls through the LangSmith LLM Gateway. The traffic-client authentication failure was traced to `load_dotenv(override=True)` replacing a configured shell key with an empty `.env` value. After fixing credential loading, a model-backed smoke test completed successfully:
-
-- Thread ID: `01a11776-6c34-7bd0-83a1-270e64e8d13c`
-- Run ID: `01a11776-6da6-7443-8a27-b08d7c4ab86c`
-
-No online evaluators were created as part of this verification.
+Local `.env` uses `LANGSMITH_PROJECT=langsmith-evals-workflow`. Hosted tracing is
+managed by LangSmith and uses the production project above. The CLI skips the
+reserved `LANGSMITH_PROJECT` variable. Renaming the hosted project to the exact
+local name was rejected with a name conflict; no existing project was renamed.
+Existing trajectory dataset examples still reference previously reviewed runs.
+The earlier deployment has not been deleted.

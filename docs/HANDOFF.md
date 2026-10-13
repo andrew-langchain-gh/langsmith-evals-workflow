@@ -129,3 +129,12 @@ To resume, read this handoff and `docs/TRAJECTORY_PRESENTATION.md`, inspect the 
 - `.github/workflows/evaluate.yml` runs the golden assertion gate and reports PR results.
 - `02_run_experiment.py --ci` requires all expected assertions to pass, with optional failed-run queue routing.
 - GitHub secret and required-status-check setup is documented in `docs/CI.md`.
+
+## Current hosted deployment (October 13)
+
+- Name: `langsmith-evals-workflow`
+- ID: `c8f61711-15de-4f08-b45d-205d43e7baa0`
+- URL: https://langsmith-evals-workflow-1adb7e671f445cc1867199bd250fad01.us.langgraph.app
+- Hosted trace project: `langsmith-evals-workflow-production` (`01a136da-a562-7b6c-9640-37a603fc6c0c`).
+- Exact-name project rename was rejected with a conflict; existing projects are unchanged.
+- Local `.env` uses `langsmith-evals-workflow`, and local traffic respects it.

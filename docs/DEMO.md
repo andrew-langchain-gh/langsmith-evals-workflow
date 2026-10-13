@@ -91,12 +91,12 @@ If `.env` defines `TRAVEL_PLANNER_MODEL`, remove that entry before running these
 
 **Talk track:** "Once you have a baseline of dataset examples and evaluators, it is time to deploy the agent and watch its behavior."
 
-**Deploy first:** follow [DEPLOYMENT.md](DEPLOYMENT.md), using deployment name `deepagent-travel-planner-prod-20261007`. Copy the deployment's API URL once it is ready. Open its linked tracing project or agent environment; Cloud controls the hosted tracing destination.
+**Deploy first:** follow [DEPLOYMENT.md](DEPLOYMENT.md), using deployment name `langsmith-evals-workflow`. Copy the deployment's API URL once it is ready. Open its linked tracing project or agent environment; Cloud controls the hosted tracing destination.
 
 Run the LangGraph CLI from the project root:
 
 ```sh
-uv run langgraph deploy --remote --name deepagent-travel-planner-prod-20261007
+uv run langgraph deploy --remote --name langsmith-evals-workflow
 ```
 
 `--remote` builds in the cloud without requiring local Docker. The command uses `langgraph.json` and deployment credentials from `.env`; non-reserved variables in that file become hosted secrets. The installed CLI (`0.4.32`) defaults to legacy deployment type `dev`. If your workspace rejects that type, use the LangSmith UI's **Serverless** option or update to a CLI version supporting the current deployment types.
@@ -104,7 +104,7 @@ uv run langgraph deploy --remote --name deepagent-travel-planner-prod-20261007
 After the deployment is ready, send a smoke-test request using its API URL:
 
 ```sh
-uv run evals/03_generate_traffic.py --url https://deepagent-travel-planner-pr-76c99bb254005eb2a4706a3d2dc1f40e.us.langgraph.app --n 1 --concurrency 1
+uv run evals/03_generate_traffic.py --url https://langsmith-evals-workflow-1adb7e671f445cc1867199bd250fad01.us.langgraph.app --n 1 --concurrency 1
 ```
 
 **Show:** The deployment's tracing destination and the smoke-test request. For a fresh deployment, show the smoke trace before adding the online evaluator. Without `--url`, the script runs the agent locally and only simulates production tracing.
@@ -116,7 +116,7 @@ uv run evals/03_generate_traffic.py --url https://deepagent-travel-planner-pr-76
 **Generate traffic after saving the evaluator:**
 
 ```sh
-uv run evals/03_generate_traffic.py --url https://deepagent-travel-planner-pr-76c99bb254005eb2a4706a3d2dc1f40e.us.langgraph.app --n 18 --concurrency 5
+uv run evals/03_generate_traffic.py --url https://langsmith-evals-workflow-1adb7e671f445cc1867199bd250fad01.us.langgraph.app --n 18 --concurrency 5
 ```
 
 Show ordinary bookings, rude users, and requests the agent cannot fully satisfy, such as a Paris hotel under $50 or a return date before departure. Hosted outputs use `outputs.messages`; the `outputs.answer` wrapper belongs to the offline runner.
