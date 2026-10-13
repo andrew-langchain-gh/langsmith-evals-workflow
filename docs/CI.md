@@ -79,3 +79,8 @@ The report job has write permissions; evaluation has only read permissions.
 Experiment metadata records the PR number, head commit SHA, and GitHub run ID.
 
 Based on https://github.com/langchain-samples/ci-evals-failure-aq.
+
+PR comments are capped below GitHub's size limit. Long failure reasons are
+shortened for display; the uploaded `report.json` retains the complete details.
+The PR comment links to the LangSmith experiment and the workflow's full report
+artifacts. Report truncation does not change the assertion-gate decision.

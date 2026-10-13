@@ -42,6 +42,8 @@ def write_ci_report(results, examples, repetitions, experiment_url, output_dir="
     for check in checks:
         if not check["passed"]:
             reason = str(check["comment"] or "Assertion failed").replace("\n", " ")
+            if len(reason) > 1000:
+                reason = reason[:1000] + "… (full details in report.json)"
             lines.append(f"- `{check['key']}` — example `{check['example_id']}`: {reason}")
     (path / "report.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
