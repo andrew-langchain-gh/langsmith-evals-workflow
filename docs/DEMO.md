@@ -144,11 +144,13 @@ uv run evals/04_import_trajectory_example.py \
 
 The importer saves `run.inputs` as replay inputs and `run.outputs` as reference outputs, with `source_run_id` linking the example to its reviewed run. Each invocation creates an example. Review in the UI, then import through `04`; the UI conversation import previously placed the full history in inputs and left outputs empty. The current dataset has been corrected.
 
-To import all completed, successful root traces from the project:
+The single-run example above is the previously reviewed Tokyo booking trace. For a new trace, replace `--run-id` after reviewing it. The existing trajectory dataset is reused; redeploying does not create a new dataset.
+
+To import all completed, successful root traces from the new `langsmith-evals-workflow-production` project:
 
 ```sh
 uv run evals/04_import_trajectory_example.py \
-  --project-id 936b8cd7-79d4-4eaf-9e29-34a9aea7a260 \
+  --project-id 01a136da-a562-7b6c-9640-37a603fc6c0c \
   --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
 ```
 

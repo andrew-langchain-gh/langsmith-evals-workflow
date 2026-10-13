@@ -23,7 +23,7 @@ To import all completed, successful root traces from the project:
 
 ```sh
 uv run evals/04_import_trajectory_example.py \
-  --project-id 936b8cd7-79d4-4eaf-9e29-34a9aea7a260 \
+  --project-id 01a136da-a562-7b6c-9640-37a603fc6c0c \
   --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
 ```
 
