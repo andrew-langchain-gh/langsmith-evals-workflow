@@ -1,6 +1,6 @@
 # Coordinator trajectory presentation
 
-Updated October 7, 2026. The implemented demo compares coordinator delegation;
+Updated October 13, 2026. The implemented demo compares coordinator delegation;
 detailed specialist tool execution is deferred.
 
 ## Review in the UI, import through the SDK
@@ -10,13 +10,13 @@ Review root run `01a117a2-46e8-7861-8705-70b44fead800` in the UI, then run:
 ```sh
 uv run evals/04_import_trajectory_example.py \
   --run-id 01a117a2-46e8-7861-8705-70b44fead800 \
-  --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
+  --dataset 503aa3e3-c21c-4562-bb6c-bccb5f33d3ee
 ```
 
 The importer copies `run.inputs` and `run.outputs` directly and records
 `source_run_id`. The current dataset is `travel-planner-trajectories`.
-Remove its malformed UI-imported example before evaluation: that example has
-conversation history in inputs and no reference outputs. Each import creates
+If importing from the UI, check that replay inputs contain only original user
+messages and reference outputs are populated. The SDK importer preserves this shape. Each import creates
 a new example; use a reviewed, completed root run.
 
 To import all completed, successful root traces from the project:
@@ -24,7 +24,7 @@ To import all completed, successful root traces from the project:
 ```sh
 uv run evals/04_import_trajectory_example.py \
   --project-id 01a136da-a562-7b6c-9640-37a603fc6c0c \
-  --dataset 24c80282-0e05-4b07-9a7d-e06c4d7250b8
+  --dataset 503aa3e3-c21c-4562-bb6c-bccb5f33d3ee
 ```
 
 Project import includes traces with no coordinator calls and creates new examples

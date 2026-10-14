@@ -28,6 +28,10 @@ uv sync
 cp .env.example .env   # set ANTHROPIC_API_KEY (and LangSmith keys for tracing)
 ```
 
+`LANGSMITH_PROJECT=langsmith-evals-workflow` selects the local tracing project.
+Hosted traces use `langsmith-evals-workflow-production`; offline evaluations have
+their own experiment projects.
+
 `TRAVEL_PLANNER_MODEL` picks the model (default `anthropic:claude-haiku-4-5-20251001`). `ANTHROPIC_BASE_URL` and `ANTHROPIC_CUSTOM_HEADERS` are read by the Anthropic SDK, so you can route calls through the LangSmith gateway.
 
 ## Run
@@ -93,22 +97,24 @@ empty credential placeholder in that file does not override a configured key.
 uv run pytest
 ```
 
-These tests cover the mock tools and make no LLM calls.
+These tests cover mock tools, deployment polling/authentication, coordinator
+trajectory matching, and the CI assertion gate/report. They make no LLM calls.
 
 ## Evaluation demo
 
-`evals/` holds numbered scripts for a LangSmith evaluation walkthrough. They cover a hand-curated golden dataset, SDK assertion evaluators, simulated production traffic for online evaluators, and SDK trajectory evaluators on a dataset built from a reviewed trace. Online evaluators, rules, and the annotation queue are configured in the LangSmith UI.
+`evals/` holds numbered scripts for a LangSmith evaluation walkthrough. They cover a hand-curated golden dataset, SDK assertion evaluators, simulated production traffic for online evaluators, and SDK trajectory evaluators on a dataset built from a reviewed trace. Online evaluators and production routing rules are configured in the LangSmith UI.
+The CI runner finds or creates the review queue and adds failed runs through the SDK.
 
 See **[docs/DEMO.md](docs/DEMO.md)** for the presenter runbook.
 
-For the same five-step workflow with runnable SDK cells and explanatory markdown,
+For runnable SDK cells and explanatory markdown covering all six steps, including GitHub CI,
 open **[notebooks/agent_evaluations.ipynb](notebooks/agent_evaluations.ipynb)**.
 Select the project's `.venv` interpreter and run each section in order; the
 notebook's configuration cell holds the dataset IDs, trace ID, and deployment URL.
 
 | Script | Step |
 |---|---|
-| `evals/00_reset_demo.py` | Delete everything the demo created in LangSmith, to start over |
+| `evals/00_reset_demo.py` | Optional destructive reset of configured datasets, experiments, queue, and tracing project; see the runbook appendix |
 | `evals/01_create_golden_dataset.py` | 1. Five hand-written `question` → `answer` examples |
 | `evals/02_run_experiment.py` | 2. Run the golden questions; an SDK evaluator scores each assertion |
 | `evals/03_generate_traffic.py [--url DEPLOYMENT_URL]` | 3. Send requests to Agent Server, or rehearse locally without `--url` |
@@ -126,6 +132,49 @@ to LangSmith; UI-bound evaluators, if present, also run.
 [`.github/workflows/evaluate.yml`](.github/workflows/evaluate.yml) runs the golden
 assertion evaluator on PRs to `main` and manual dispatches. Any failed or missing
 assertion fails **Golden assertions**. Reports are uploaded even on failure and
-posted as a PR comment. Failed runs enter `travel-planner-review` in LangSmith.
+posted as a PR comment for PR runs. Failed runs enter `travel-planner-review` in LangSmith.
+
+```text
+PR opened / updated
+        |
+        v
+GitHub Actions: golden dataset + assertion evaluator
+        |
+        v
+Every expected assertion passed?
+        |
+        +-- YES --> Check passes --> Merge allowed*
+        |
+        +-- NO ---> Check fails --> Merge blocked*
+                         |
+                         v
+                  Failed run IDs
+                         |
+                         v
+             travel-planner-review queue
+                         |
+                         v
+                    Human review
+
+Both paths --> PR report + ASCII score chart
+                         + LangSmith experiment link
+                         + Full report artifacts
+
+* Configure Golden assertions as a required status check.
+```
+
+Add repository **secrets** `LANGSMITH_API_KEY` and `ANTHROPIC_API_KEY`.
+Set the optional repository **variables** `LANGSMITH_WORKSPACE_ID` and
+`EVAL_DATASET_NAME` (default: `travel-planner-golden`). Require **Golden assertions**
+on `main` to enforce merge blocking. The workflow evaluates PR code locally;
+it does not redeploy the hosted agent.
+
+To demonstrate CI without changing application code, open a PR containing an
+empty commit, or manually run **Actions → Golden assertion evaluation**.
+See the linked guide for commands.
+
+```sh
+uv run evals/02_run_experiment.py --ci --annotation-queue travel-planner-review
+```
 
 See [CI setup and presentation walkthrough](docs/CI.md).

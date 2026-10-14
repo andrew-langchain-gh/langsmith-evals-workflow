@@ -40,7 +40,7 @@ def coordinator_matcher(mode: str = "strict"):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", default="24c80282-0e05-4b07-9a7d-e06c4d7250b8")
+    parser.add_argument("--dataset", default="503aa3e3-c21c-4562-bb6c-bccb5f33d3ee")
     parser.add_argument("--concurrency", type=int, default=5)
     parser.add_argument("--num-repetitions", type=int, default=1, help="Runs per dataset example (default: 1)")
     args = parser.parse_args()

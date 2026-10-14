@@ -6,6 +6,7 @@ Named assertions capture individual acceptance criteria for an assertion-aware o
 """
 
 import argparse
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langsmith import Client
@@ -138,7 +139,7 @@ def main():
     parser.add_argument("--recreate", action="store_true", help="Delete and recreate the dataset")
     args = parser.parse_args()
 
-    load_dotenv(override=True)
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
     client = Client()
 
     if client.has_dataset(dataset_name=DATASET_NAME):

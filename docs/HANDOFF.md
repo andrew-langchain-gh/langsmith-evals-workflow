@@ -138,3 +138,11 @@ To resume, read this handoff and `docs/TRAJECTORY_PRESENTATION.md`, inspect the 
 - Hosted trace project: `langsmith-evals-workflow-production` (`01a136da-a562-7b6c-9640-37a603fc6c0c`).
 - Exact-name project rename was rejected with a conflict; existing projects are unchanged.
 - Local `.env` uses `langsmith-evals-workflow`, and local traffic respects it.
+
+## Final consistency review
+
+- Current trajectory dataset: `503aa3e3-c21c-4562-bb6c-bccb5f33d3ee` in runbook, notebook, presentation notes, and runner default.
+- README covers CI gate, PR reports, and failed-run queue with an ASCII flow chart.
+- Model configuration in exported environment takes precedence over `.env` across runners.
+- Reset supports explicit `--project-id`; no reset was executed during this review.
+- Earlier status/dataset IDs in this handoff are historical.

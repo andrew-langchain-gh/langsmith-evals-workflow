@@ -6,6 +6,7 @@ annotation queue. `--include-dev-project` also deletes the dev tracing project u
 """
 
 import argparse
+from pathlib import Path
 import asyncio
 import os
 
@@ -35,9 +36,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt")
     parser.add_argument("--include-dev-project", action="store_true", help="Also delete the dev tracing project")
+    parser.add_argument("--project-id", help="Tracing project to reset instead of the legacy project name")
     args = parser.parse_args()
 
-    load_dotenv(override=True)
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
     client = Client()
 
     datasets = [
@@ -46,18 +48,22 @@ def main():
         if client.has_dataset(dataset_name=name)
     ]
     experiments = [e for d in datasets for e in client.list_projects(reference_dataset_id=d.id)]
-    prod = next(iter(client.list_projects(name=PROD_PROJECT)), None)
+    prod = (client.read_project(project_id=args.project_id) if args.project_id
+            else next(iter(client.list_projects(name=PROD_PROJECT)), None))
     rules = [r for d in datasets for r in rules_for(client, dataset_id=str(d.id))]
     rules += rules_for(client, session_id=str(prod.id)) if prod else []
     queue = next(iter(client.list_annotation_queues(name=QUEUE_NAME)), None)
     dev_name = os.environ.get("LANGSMITH_PROJECT", "deepagent-travel-planner")
     dev = next(iter(client.list_projects(name=dev_name)), None) if args.include_dev_project else None
 
+    if prod and dev and prod.id == dev.id:
+        dev = None  # Never delete the same project twice.
+
     plan = [
         *(f"experiment   {e.name}" for e in experiments),
         *(f"dataset      {d.name}" for d in datasets),
         *(f"rule         {r['display_name']}" for r in rules),
-        *([f"project      {PROD_PROJECT} (and its traces)"] if prod else []),
+        *([f"project      {prod.name} (and its traces)"] if prod else []),
         *([f"queue        {QUEUE_NAME}"] if queue else []),
         *([f"project      {dev_name} (and its traces)"] if dev else []),
     ]

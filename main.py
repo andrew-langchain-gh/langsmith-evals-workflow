@@ -1,3 +1,4 @@
+from pathlib import Path
 from dotenv import load_dotenv
 from langchain_core.utils.uuid import uuid7
 from langgraph.checkpoint.memory import InMemorySaver
@@ -39,7 +40,7 @@ def print_itinerary(agent, config) -> None:
 
 
 def main():
-    load_dotenv(override=True)
+    load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
     agent = build_agent(checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": str(uuid7())}}
 

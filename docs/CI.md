@@ -9,6 +9,37 @@ errors, and incomplete example/repetition coverage fail the check. Optional
 UI-bound metrics do not change this gate. The report uses the same decision as
 CI, never an average that could hide a failing example.
 
+## CI flow
+
+```text
+PR opened / updated
+        |
+        v
+GitHub Actions: golden dataset + assertion evaluator
+        |
+        v
+Every expected assertion passed?
+        |
+        +-- YES --> Check passes --> Merge allowed*
+        |
+        +-- NO ---> Check fails --> Merge blocked*
+                         |
+                         v
+                  Failed run IDs
+                         |
+                         v
+             travel-planner-review queue
+                         |
+                         v
+                    Human review
+
+Both paths --> PR report + ASCII score chart
+                         + LangSmith experiment link
+                         + Full report artifacts
+
+* Configure Golden assertions as a required status check.
+```
+
 ## GitHub setup
 
 1. Under Settings → Secrets and variables → Actions, add repository secrets
@@ -35,6 +66,8 @@ Dataset edits change the benchmark; keep it fixed while comparing PRs.
 Create a branch with an empty commit, push it, and open a PR against `main`:
 
 ```sh
+git switch main
+git pull --ff-only origin main
 git switch -c demo/ci-evaluation
 git commit --allow-empty -m "Trigger CI evaluation demo"
 git push -u origin demo/ci-evaluation
