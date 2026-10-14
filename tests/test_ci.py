@@ -65,3 +65,34 @@ def test_optional_feedback_does_not_change_gate(tmp_path):
     result = row()
     result["evaluation_results"]["results"].append(NS(key="correctness", score=0, comment="optional"))
     assert report(tmp_path, [result])["passed"]
+
+
+def test_long_error_is_shortened_in_markdown_but_preserved_in_json(tmp_path):
+    import json
+    error = "Model error: " + "x" * 70000
+    result = report(tmp_path, [row(error=error)])
+    assert not result["passed"]
+    markdown = (tmp_path / "report.md").read_text()
+    assert len(markdown) < 4000
+    assert "Open LangSmith experiment" in markdown
+    assert "full details in report.json" in markdown
+    stored = json.loads((tmp_path / "report.json").read_text())
+    assert stored["checks"][0]["comment"] == error
+
+
+def test_chart_shows_per_assertion_rates(tmp_path):
+    result = report(tmp_path, [row(), row((1, 0))], repetitions=2)
+    text = (tmp_path / "report.md").read_text()
+    assert not result["passed"]
+    assert "[####################]  2/2  100%" in text
+    assert "[##########..........]  1/2   50%" in text
+    assert "Failed assertions: 1 · Affected runs: 1" in text
+    assert "Open LangSmith experiment" in text
+
+
+def test_empty_results_do_not_show_a_successful_chart(tmp_path):
+    result = report(tmp_path, [])
+    text = (tmp_path / "report.md").read_text()
+    assert not result["passed"]
+    assert "Assertion pass rates" not in text
+    assert "Incomplete evaluation" in text

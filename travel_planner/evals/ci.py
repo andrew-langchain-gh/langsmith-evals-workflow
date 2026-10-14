@@ -37,11 +37,31 @@ def write_ci_report(results, examples, repetitions, experiment_url, output_dir="
     lines = ["## Golden assertion evaluation", "",
              f"**{'PASSED' if report['passed'] else 'FAILED'}** — {sum(c['passed'] for c in checks)}/{len(checks)} assertions passed.",
              "", f"[Open LangSmith experiment]({experiment_url})", ""]
+    if checks:
+        totals = Counter(c["key"] for c in checks)
+        passed_by_key = Counter(c["key"] for c in checks if c["passed"])
+        label_width = max(len(key) for key in totals)
+        lines.extend(["### Assertion pass rates", "", "```text"])
+        for key, total in totals.items():
+            passed = passed_by_key[key]
+            filled = 20 * passed // total
+            bar = "#" * filled + "." * (20 - filled)
+            lines.append(f"{key:<{label_width}}  [{bar}]  {passed}/{total}  {100 * passed / total:3.0f}%")
+        lines.extend(["```", "", "`#` passed · `.` failed or missing", ""])
+    failed_checks = sum(not c["passed"] for c in checks)
+    lines.extend([
+        f"**Failed assertions: {failed_checks} · Affected runs: {len(failed_run_ids)}**",
+        "Every expected assertion must pass to clear the gate.", "",
+    ])
+    if failed_checks:
+        lines.extend(["### Failures to review", ""])
     if not coverage:
         lines.append("Incomplete evaluation: expected a result and nonempty assertion list for every example/repetition.")
     for check in checks:
         if not check["passed"]:
             reason = str(check["comment"] or "Assertion failed").replace("\n", " ")
+            if len(reason) > 1000:
+                reason = reason[:1000] + "… (full details in report.json)"
             lines.append(f"- `{check['key']}` — example `{check['example_id']}`: {reason}")
     (path / "report.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
